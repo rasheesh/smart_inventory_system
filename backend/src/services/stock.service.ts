@@ -1,4 +1,5 @@
 import { prisma } from '../lib/prisma'
+import { logActivity } from './activity.service'
 import { z } from 'zod'
 
 export const stockAdjustmentSchema = z.object({
@@ -85,8 +86,8 @@ export async function createStockAdjustment(input: StockAdjustmentInput, actingU
         ? 'Removed'
         : 'Transferred'
 
-  const [adjustment] = await prisma.$transaction([
-    prisma.stockAdjustment.create({
+  return prisma.$transaction(async (tx) => {
+    const adjustment = await tx.stockAdjustment.create({
       data: {
         itemId: input.itemId,
         itemName: item.name,
@@ -97,21 +98,21 @@ export async function createStockAdjustment(input: StockAdjustmentInput, actingU
         reason: input.reason,
         user: user.name,
       },
-    }),
-    prisma.inventoryItem.update({
+    })
+    await tx.inventoryItem.update({
       where: { id: input.itemId },
       data: { quantity: { increment: quantityDelta } },
-    }),
-    prisma.activity.create({
-      data: {
+    })
+    await logActivity(
+      {
         userId: actingUserId,
         action: actionLabel,
         item: item.name,
         branch: item.branch,
         details: `${input.adjustmentType} ${input.quantity} units — ${input.reason}`,
       },
-    }),
-  ])
-
-  return adjustment
+      tx,
+    )
+    return adjustment
+  })
 }

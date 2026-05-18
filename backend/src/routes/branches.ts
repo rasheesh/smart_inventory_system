@@ -41,7 +41,7 @@ router.post('/', authenticate, requireMinRole('admin'), async (req, res) => {
   }
 
   try {
-    const branch = await createBranch(parsed.data)
+    const branch = await createBranch(parsed.data, req.user!.userId)
     res.status(201).json(branch)
   } catch (err: unknown) {
     if (
@@ -77,16 +77,12 @@ router.put('/:id', authenticate, requireMinRole('admin'), async (req, res) => {
   }
 
   try {
-    const branch = await updateBranch(req.params.id as string, parsed.data)
+    const branch = await updateBranch(req.params.id as string, parsed.data, req.user!.userId)
     res.json(branch)
   } catch (err: unknown) {
-    if (
-      typeof err === 'object' &&
-      err !== null &&
-      'code' in err &&
-      (err as { code: string }).code === 'P2025'
-    ) {
-      res.status(404).json({ message: 'Branch not found' })
+    const e = err as { status?: number; message?: string; code?: string }
+    if (e.status === 404 || e.code === 'P2025') {
+      res.status(404).json({ message: e.message ?? 'Branch not found' })
       return
     }
     console.error('[branches] PUT /:id error:', err)
@@ -97,16 +93,12 @@ router.put('/:id', authenticate, requireMinRole('admin'), async (req, res) => {
 // ─── DELETE /api/branches/:id ────────────────────────────────────────────────
 router.delete('/:id', authenticate, requireMinRole('admin'), async (req, res) => {
   try {
-    await deleteBranch(req.params.id as string)
+    await deleteBranch(req.params.id as string, req.user!.userId)
     res.json({ message: 'Branch deleted successfully' })
   } catch (err: unknown) {
-    if (
-      typeof err === 'object' &&
-      err !== null &&
-      'code' in err &&
-      (err as { code: string }).code === 'P2025'
-    ) {
-      res.status(404).json({ message: 'Branch not found' })
+    const e = err as { status?: number; message?: string; code?: string }
+    if (e.status === 404 || e.code === 'P2025') {
+      res.status(404).json({ message: e.message ?? 'Branch not found' })
       return
     }
     console.error('[branches] DELETE /:id error:', err)

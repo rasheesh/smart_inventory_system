@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma'
 import bcrypt from 'bcryptjs'
+import { describeChangedFields, logActivity } from './activity.service'
 
 export async function getUsers() {
   return prisma.user.findMany({
@@ -43,28 +44,42 @@ export interface CreateUserData {
   status?: 'active' | 'inactive'
 }
 
-export async function createUser(data: CreateUserData) {
+export async function createUser(data: CreateUserData, actingUserId: string) {
   const passwordHash = await bcrypt.hash(data.password, 10)
-  return prisma.user.create({
-    data: {
-      name: data.name,
-      email: data.email,
-      username: data.username,
-      passwordHash,
-      role: data.role,
-      assignedBranch: data.assignedBranch,
-      status: data.status ?? 'active',
-    },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      username: true,
-      role: true,
-      assignedBranch: true,
-      status: true,
-      lastLogin: true,
-    },
+
+  return prisma.$transaction(async (tx) => {
+    const user = await tx.user.create({
+      data: {
+        name: data.name,
+        email: data.email,
+        username: data.username,
+        passwordHash,
+        role: data.role,
+        assignedBranch: data.assignedBranch,
+        status: data.status ?? 'active',
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        username: true,
+        role: true,
+        assignedBranch: true,
+        status: true,
+        lastLogin: true,
+      },
+    })
+    await logActivity(
+      {
+        userId: actingUserId,
+        action: 'Created',
+        item: user.name,
+        branch: user.assignedBranch,
+        details: `User ${user.username} (${user.role})`,
+      },
+      tx,
+    )
+    return user
   })
 }
 
@@ -78,7 +93,12 @@ export interface UpdateUserData {
   status?: 'active' | 'inactive'
 }
 
-export async function updateUser(id: string, data: UpdateUserData) {
+export async function updateUser(id: string, data: UpdateUserData, actingUserId: string) {
+  const existing = await prisma.user.findUnique({ where: { id } })
+  if (!existing) {
+    throw { status: 404, message: 'User not found' }
+  }
+
   const updatePayload: Record<string, unknown> = {}
 
   if (data.name !== undefined) updatePayload.name = data.name
@@ -91,24 +111,56 @@ export async function updateUser(id: string, data: UpdateUserData) {
     updatePayload.passwordHash = await bcrypt.hash(data.password, 10)
   }
 
-  return prisma.user.update({
-    where: { id },
-    data: updatePayload,
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      username: true,
-      role: true,
-      assignedBranch: true,
-      status: true,
-      lastLogin: true,
-    },
+  return prisma.$transaction(async (tx) => {
+    const user = await tx.user.update({
+      where: { id },
+      data: updatePayload,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        username: true,
+        role: true,
+        assignedBranch: true,
+        status: true,
+        lastLogin: true,
+      },
+    })
+    await logActivity(
+      {
+        userId: actingUserId,
+        action: 'Updated',
+        item: user.name,
+        branch: user.assignedBranch,
+        details: describeChangedFields({
+          ...data,
+          ...(data.password ? { password: true } : {}),
+        }),
+      },
+      tx,
+    )
+    return user
   })
 }
 
-export async function deleteUser(id: string) {
-  // Delete related activities first to avoid FK constraint errors
-  await prisma.activity.deleteMany({ where: { userId: id } })
-  return prisma.user.delete({ where: { id } })
+export async function deleteUser(id: string, actingUserId: string) {
+  const existing = await prisma.user.findUnique({ where: { id } })
+  if (!existing) {
+    throw { status: 404, message: 'User not found' }
+  }
+
+  return prisma.$transaction(async (tx) => {
+    await logActivity(
+      {
+        userId: actingUserId,
+        action: 'Deleted',
+        item: existing.name,
+        branch: existing.assignedBranch,
+        details: `User ${existing.username}`,
+      },
+      tx,
+    )
+    await tx.activity.deleteMany({ where: { userId: id } })
+    await tx.user.delete({ where: { id } })
+  })
 }

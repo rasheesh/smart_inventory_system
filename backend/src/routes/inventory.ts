@@ -115,10 +115,13 @@ router.post('/', authenticate, requireMinRole('branch-manager'), async (req, res
   }
 
   try {
-    const item = await createInventoryItem({
-      ...parsed.data,
-      expiryDate: new Date(parsed.data.expiryDate),
-    })
+    const item = await createInventoryItem(
+      {
+        ...parsed.data,
+        expiryDate: new Date(parsed.data.expiryDate),
+      },
+      req.user!.userId,
+    )
     res.status(201).json({ ...item, status: toFrontendStatus(item.status) })
   } catch (err: unknown) {
     if (
@@ -153,16 +156,16 @@ router.put('/:id', authenticate, requireMinRole('branch-manager'), async (req, r
       updateData.status = toBackendStatus(parsed.data.status)
     }
 
-    const item = await updateInventoryItem(req.params.id as string, updateData)
+    const item = await updateInventoryItem(
+      req.params.id as string,
+      updateData,
+      req.user!.userId,
+    )
     res.json({ ...item, status: toFrontendStatus(item.status) })
   } catch (err: unknown) {
-    if (
-      typeof err === 'object' &&
-      err !== null &&
-      'code' in err &&
-      (err as { code: string }).code === 'P2025'
-    ) {
-      res.status(404).json({ message: 'Item not found' })
+    const e = err as { status?: number; message?: string; code?: string }
+    if (e.status === 404 || e.code === 'P2025') {
+      res.status(404).json({ message: e.message ?? 'Item not found' })
       return
     }
     console.error('[inventory] PUT /:id error:', err)
@@ -174,16 +177,12 @@ router.put('/:id', authenticate, requireMinRole('branch-manager'), async (req, r
 
 router.delete('/:id', authenticate, requireMinRole('branch-manager'), async (req, res) => {
   try {
-    await deleteInventoryItem(req.params.id as string)
+    await deleteInventoryItem(req.params.id as string, req.user!.userId)
     res.json({ message: 'Item deleted successfully' })
   } catch (err: unknown) {
-    if (
-      typeof err === 'object' &&
-      err !== null &&
-      'code' in err &&
-      (err as { code: string }).code === 'P2025'
-    ) {
-      res.status(404).json({ message: 'Item not found' })
+    const e = err as { status?: number; message?: string; code?: string }
+    if (e.status === 404 || e.code === 'P2025') {
+      res.status(404).json({ message: e.message ?? 'Item not found' })
       return
     }
     console.error('[inventory] DELETE /:id error:', err)

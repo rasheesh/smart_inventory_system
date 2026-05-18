@@ -96,6 +96,17 @@ export interface AlertFilters {
 export interface ActivityFilters {
   searchUser?: string
   action?: string | 'all'
+  branch?: string | 'all'
+  searchItem?: string
+  dateFrom?: string
+  dateTo?: string
+}
+
+export interface AdvancedActivityFilters {
+  branch: string
+  searchItem: string
+  dateFrom: string
+  dateTo: string
 }
 
 export interface ReportFilters {

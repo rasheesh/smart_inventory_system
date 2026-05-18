@@ -61,10 +61,13 @@ router.post('/', authenticate, requireRole('admin'), async (req, res) => {
   }
 
   try {
-    const user = await createUser({
-      ...parsed.data,
-      role: toBackendRole(parsed.data.role),
-    })
+    const user = await createUser(
+      {
+        ...parsed.data,
+        role: toBackendRole(parsed.data.role),
+      },
+      req.user!.userId,
+    )
     res.status(201).json({ ...user, role: toFrontendRole(user.role) })
   } catch (err: unknown) {
     // Handle unique constraint violations (username or email already exists)
@@ -102,16 +105,16 @@ router.put('/:id', authenticate, requireRole('admin'), async (req, res) => {
     if (parsed.data.role) {
       updateData.role = toBackendRole(parsed.data.role)
     }
-    const user = await updateUser(req.params.id as string, updateData as Parameters<typeof updateUser>[1])
+    const user = await updateUser(
+      req.params.id as string,
+      updateData as Parameters<typeof updateUser>[1],
+      req.user!.userId,
+    )
     res.json({ ...user, role: toFrontendRole(user.role) })
   } catch (err: unknown) {
-    if (
-      typeof err === 'object' &&
-      err !== null &&
-      'code' in err &&
-      (err as { code: string }).code === 'P2025'
-    ) {
-      res.status(404).json({ message: 'User not found' })
+    const e = err as { status?: number; message?: string; code?: string }
+    if (e.status === 404 || e.code === 'P2025') {
+      res.status(404).json({ message: e.message ?? 'User not found' })
       return
     }
     if (
@@ -144,16 +147,12 @@ router.delete('/:id', authenticate, requireRole('admin'), async (req, res) => {
   }
 
   try {
-    await deleteUser(req.params.id as string)
+    await deleteUser(req.params.id as string, req.user!.userId)
     res.json({ message: 'User deleted successfully' })
   } catch (err: unknown) {
-    if (
-      typeof err === 'object' &&
-      err !== null &&
-      'code' in err &&
-      (err as { code: string }).code === 'P2025'
-    ) {
-      res.status(404).json({ message: 'User not found' })
+    const e = err as { status?: number; message?: string; code?: string }
+    if (e.status === 404 || e.code === 'P2025') {
+      res.status(404).json({ message: e.message ?? 'User not found' })
       return
     }
     console.error('[users] DELETE /:id error:', err)

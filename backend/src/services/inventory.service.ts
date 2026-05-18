@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma'
 import { ItemStatus, Prisma } from '@prisma/client'
+import { describeChangedFields, logActivity } from './activity.service'
 
 export interface InventoryFilters {
   branchId?: string
@@ -166,7 +167,7 @@ export interface CreateInventoryItemData {
   lastRestocked?: Date
 }
 
-export async function createInventoryItem(data: CreateInventoryItemData) {
+export async function createInventoryItem(data: CreateInventoryItemData, actingUserId: string) {
   // Auto-determine status if not provided
   let status = data.status
   if (!status) {
@@ -183,19 +184,32 @@ export async function createInventoryItem(data: CreateInventoryItemData) {
     }
   }
 
-  return prisma.inventoryItem.create({
-    data: {
-      name: data.name,
-      sku: data.sku,
-      quantity: data.quantity,
-      price: data.price,
-      reorderLevel: data.reorderLevel,
-      expiryDate: data.expiryDate,
-      supplier: data.supplier,
-      branch: data.branch,
-      status,
-      lastRestocked: data.lastRestocked ?? new Date(),
-    },
+  return prisma.$transaction(async (tx) => {
+    const item = await tx.inventoryItem.create({
+      data: {
+        name: data.name,
+        sku: data.sku,
+        quantity: data.quantity,
+        price: data.price,
+        reorderLevel: data.reorderLevel,
+        expiryDate: data.expiryDate,
+        supplier: data.supplier,
+        branch: data.branch,
+        status,
+        lastRestocked: data.lastRestocked ?? new Date(),
+      },
+    })
+    await logActivity(
+      {
+        userId: actingUserId,
+        action: 'Created',
+        item: item.name,
+        branch: item.branch,
+        details: `SKU ${item.sku}, qty ${item.quantity}`,
+      },
+      tx,
+    )
+    return item
   })
 }
 
@@ -226,22 +240,54 @@ export interface UpdateInventoryItemData {
   status?: ItemStatus
 }
 
-export async function updateInventoryItem(id: string, data: UpdateInventoryItemData) {
-  // If expiry date or reorder level changes, we might want to auto-update status
-  // but to keep it simple, we just update the fields provided.
-  return prisma.inventoryItem.update({
-    where: { id },
-    data,
+export async function updateInventoryItem(
+  id: string,
+  data: UpdateInventoryItemData,
+  actingUserId: string,
+) {
+  const existing = await prisma.inventoryItem.findUnique({ where: { id } })
+  if (!existing) {
+    throw { status: 404, message: 'Item not found' }
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const item = await tx.inventoryItem.update({
+      where: { id },
+      data,
+    })
+    await logActivity(
+      {
+        userId: actingUserId,
+        action: 'Updated',
+        item: item.name,
+        branch: item.branch,
+        details: describeChangedFields(data as Record<string, unknown>),
+      },
+      tx,
+    )
+    return item
   })
 }
 
-export async function deleteInventoryItem(id: string) {
-  // We need to handle related stock adjustments if any, or just let cascade delete handle it.
-  // Assuming cascade is set up, or we can just delete the item. 
-  // Let's delete related stock adjustments first just in case.
-  return prisma.$transaction([
-    prisma.stockAdjustment.deleteMany({ where: { itemId: id } }),
-    prisma.inventoryItem.delete({ where: { id } }),
-  ])
+export async function deleteInventoryItem(id: string, actingUserId: string) {
+  const existing = await prisma.inventoryItem.findUnique({ where: { id } })
+  if (!existing) {
+    throw { status: 404, message: 'Item not found' }
+  }
+
+  return prisma.$transaction(async (tx) => {
+    await tx.stockAdjustment.deleteMany({ where: { itemId: id } })
+    await tx.inventoryItem.delete({ where: { id } })
+    await logActivity(
+      {
+        userId: actingUserId,
+        action: 'Deleted',
+        item: existing.name,
+        branch: existing.branch,
+        details: `SKU ${existing.sku}`,
+      },
+      tx,
+    )
+  })
 }
 

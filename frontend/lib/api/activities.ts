@@ -8,6 +8,10 @@ export async function fetchActivities(filters?: ActivityFilters): Promise<Activi
   const params = new URLSearchParams()
   if (filters?.searchUser) params.set('searchUser', filters.searchUser)
   if (filters?.action && filters.action !== 'all') params.set('action', filters.action)
+  if (filters?.branch && filters.branch !== 'all') params.set('branch', filters.branch)
+  if (filters?.searchItem) params.set('searchItem', filters.searchItem)
+  if (filters?.dateFrom) params.set('dateFrom', filters.dateFrom)
+  if (filters?.dateTo) params.set('dateTo', filters.dateTo)
 
   const query = params.toString()
   const res = await apiFetch(`/api/activities${query ? `?${query}` : ''}`)
