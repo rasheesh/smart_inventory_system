@@ -1,17 +1,22 @@
 'use client'
 
+import { useState } from 'react'
 import { StockAdjustmentForm } from '@/components/stock-ops/stock-adjustment-form'
 import { AdjustmentHistoryTable } from '@/components/stock-ops/adjustment-history-table'
 import { useAuth } from '@/lib/auth-context'
 import { canTransferStock } from '@/lib/permissions'
 import type { StockAdjustmentPayload } from '@/lib/types'
+import { submitStockAdjustment } from '@/lib/api/stock-adjustments'
 
 export default function StockOperationsPage() {
   const { user } = useAuth()
   const userCanTransfer = user?.role ? canTransferStock(user.role) : false
+  const [refreshKey, setRefreshKey] = useState(0)
 
-  const handleStockAdjustmentSubmit = (payload: StockAdjustmentPayload): void => {
-    // TODO: replace with API call
+  const handleStockAdjustmentSubmit = async (payload: StockAdjustmentPayload): Promise<void> => {
+    await submitStockAdjustment(payload)
+    // Trigger history table refresh
+    setRefreshKey(prev => prev + 1)
   }
 
   return (
@@ -32,7 +37,7 @@ export default function StockOperationsPage() {
           <StockAdjustmentForm onSubmit={handleStockAdjustmentSubmit} />
         </div>
         <div className="lg:col-span-2">
-          <AdjustmentHistoryTable />
+          <AdjustmentHistoryTable key={refreshKey} />
         </div>
       </div>
     </div>

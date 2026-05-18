@@ -1,5 +1,5 @@
 import { prisma } from '../lib/prisma'
-import { ItemStatus } from '@prisma/client'
+import { ItemStatus, Prisma } from '@prisma/client'
 
 export interface InventoryFilters {
   branchId?: string
@@ -150,3 +150,98 @@ export async function getExpirationTimeline(): Promise<ExpirationTimelinePeriod[
     },
   ]
 }
+
+// ─── Create ───────────────────────────────────────────────────────────────────
+
+export interface CreateInventoryItemData {
+  name: string
+  sku: string
+  quantity: number
+  price: number
+  reorderLevel: number
+  expiryDate: Date
+  supplier: string
+  branch: string
+  status?: ItemStatus
+  lastRestocked?: Date
+}
+
+export async function createInventoryItem(data: CreateInventoryItemData) {
+  // Auto-determine status if not provided
+  let status = data.status
+  if (!status) {
+    const now = new Date()
+    const daysUntilExpiry = (data.expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+    if (daysUntilExpiry <= 0) {
+      status = ItemStatus.expired
+    } else if (daysUntilExpiry <= 30) {
+      status = ItemStatus.expiring
+    } else if (data.quantity <= data.reorderLevel) {
+      status = ItemStatus.low_stock
+    } else {
+      status = ItemStatus.normal
+    }
+  }
+
+  return prisma.inventoryItem.create({
+    data: {
+      name: data.name,
+      sku: data.sku,
+      quantity: data.quantity,
+      price: data.price,
+      reorderLevel: data.reorderLevel,
+      expiryDate: data.expiryDate,
+      supplier: data.supplier,
+      branch: data.branch,
+      status,
+      lastRestocked: data.lastRestocked ?? new Date(),
+    },
+  })
+}
+
+// ─── Export ───────────────────────────────────────────────────────────────────
+
+export async function getInventoryItemsForExport(userRole: string, userBranch: string) {
+  const where: Prisma.InventoryItemWhereInput = {}
+  if (userRole === 'branch-manager' || userRole === 'branch_manager') {
+    where.branch = userBranch
+  }
+
+  return prisma.inventoryItem.findMany({
+    where,
+    orderBy: { name: 'asc' },
+  })
+}
+
+// ─── Update & Delete ──────────────────────────────────────────────────────────
+
+export interface UpdateInventoryItemData {
+  name?: string
+  sku?: string
+  price?: number
+  reorderLevel?: number
+  expiryDate?: Date
+  supplier?: string
+  branch?: string
+  status?: ItemStatus
+}
+
+export async function updateInventoryItem(id: string, data: UpdateInventoryItemData) {
+  // If expiry date or reorder level changes, we might want to auto-update status
+  // but to keep it simple, we just update the fields provided.
+  return prisma.inventoryItem.update({
+    where: { id },
+    data,
+  })
+}
+
+export async function deleteInventoryItem(id: string) {
+  // We need to handle related stock adjustments if any, or just let cascade delete handle it.
+  // Assuming cascade is set up, or we can just delete the item. 
+  // Let's delete related stock adjustments first just in case.
+  return prisma.$transaction([
+    prisma.stockAdjustment.deleteMany({ where: { itemId: id } }),
+    prisma.inventoryItem.delete({ where: { id } }),
+  ])
+}
+

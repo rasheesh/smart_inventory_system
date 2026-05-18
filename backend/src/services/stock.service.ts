@@ -62,6 +62,11 @@ export async function createStockAdjustment(input: StockAdjustmentInput, actingU
     throw { status: 404, message: `Item with id '${input.itemId}' not found` }
   }
 
+  const user = await prisma.user.findUnique({ where: { id: actingUserId } })
+  if (!user) {
+    throw { status: 404, message: 'User not found' }
+  }
+
   if (input.adjustmentType === 'remove' || input.adjustmentType === 'transfer') {
     if (item.quantity < input.quantity) {
       throw {
@@ -90,7 +95,7 @@ export async function createStockAdjustment(input: StockAdjustmentInput, actingU
         fromBranch: input.fromBranch ?? null,
         toBranch: input.toBranch ?? null,
         reason: input.reason,
-        user: actingUserId,
+        user: user.name,
       },
     }),
     prisma.inventoryItem.update({

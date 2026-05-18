@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { Loader2 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -19,7 +20,7 @@ import { useAuth } from '@/lib/auth-context'
 import { canTransferStock as checkCanTransfer, canAccessAllBranches } from '@/lib/permissions'
 
 interface StockAdjustmentFormProps {
-  onSubmit?: (payload: StockAdjustmentPayload) => void
+  onSubmit?: (payload: StockAdjustmentPayload) => Promise<void>
 }
 
 export function StockAdjustmentForm({ onSubmit }: StockAdjustmentFormProps) {
@@ -31,19 +32,22 @@ export function StockAdjustmentForm({ onSubmit }: StockAdjustmentFormProps) {
   const [branches, setBranches] = useState<Branch[]>([])
 
   useEffect(() => {
-    fetchInventoryItems().then(setInventoryItems)
+    fetchInventoryItems().then(setInventoryItems).catch(() => {})
   }, [])
 
   useEffect(() => {
-    fetchBranches().then(setBranches)
+    fetchBranches().then(setBranches).catch(() => {})
   }, [])
 
-  const [adjustmentType, setAdjustmentType] = useState<'add' | 'remove' | 'correction'>('add')
+  const [adjustmentType, setAdjustmentType] = useState<'add' | 'remove' | 'transfer'>('add')
   const [itemId, setItemId] = useState('')
   const [quantity, setQuantity] = useState('')
   const [fromBranch, setFromBranch] = useState(isAdmin ? '' : (user?.branch || ''))
   const [toBranch, setToBranch] = useState('')
   const [reason, setReason] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
   // Filter items based on user branch
   const availableItems = isAdmin
@@ -51,21 +55,26 @@ export function StockAdjustmentForm({ onSubmit }: StockAdjustmentFormProps) {
     : inventoryItems.filter((item) => item.branch === user?.branch)
 
   const adjustmentTypes = userCanTransfer
-    ? (['add', 'remove', 'correction'] as const)
+    ? (['add', 'remove', 'transfer'] as const)
     : (['add', 'remove'] as const)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setFormError(null)
+    setSuccessMessage(null)
 
     if (!itemId || !quantity || !reason) {
+      setFormError('Please fill in all required fields')
       return
     }
 
-    if (adjustmentType === 'correction' && (!fromBranch || !toBranch)) {
+    if (adjustmentType === 'transfer' && (!fromBranch || !toBranch)) {
+      setFormError('Please select both source and destination branches')
       return
     }
 
-    if (adjustmentType !== 'correction' && !fromBranch) {
+    if (adjustmentType !== 'transfer' && !fromBranch) {
+      setFormError('Please select a branch')
       return
     }
 
@@ -74,12 +83,21 @@ export function StockAdjustmentForm({ onSubmit }: StockAdjustmentFormProps) {
       itemId,
       quantity: parseInt(quantity),
       fromBranch: fromBranch || undefined,
-      toBranch: adjustmentType === 'correction' ? toBranch : undefined,
+      toBranch: adjustmentType === 'transfer' ? toBranch : undefined,
       reason,
     }
 
-    onSubmit?.(formData)
-    resetForm()
+    setIsSubmitting(true)
+    try {
+      await onSubmit?.(formData)
+      setSuccessMessage('Stock adjustment submitted successfully!')
+      resetForm()
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to submit adjustment'
+      setFormError(message)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const resetForm = () => {
@@ -89,6 +107,7 @@ export function StockAdjustmentForm({ onSubmit }: StockAdjustmentFormProps) {
     setFromBranch(isAdmin ? '' : (user?.branch || ''))
     setToBranch('')
     setReason('')
+    setFormError(null)
   }
 
   return (
@@ -103,6 +122,18 @@ export function StockAdjustmentForm({ onSubmit }: StockAdjustmentFormProps) {
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Error / Success messages */}
+          {formError && (
+            <div className="bg-destructive/10 text-destructive rounded-md px-3 py-2 text-sm">
+              {formError}
+            </div>
+          )}
+          {successMessage && (
+            <div className="bg-green-50 text-green-700 rounded-md px-3 py-2 text-sm">
+              {successMessage}
+            </div>
+          )}
+
           {/* Adjustment Type */}
           <div>
             <label className="text-sm font-medium">Adjustment Type</label>
@@ -111,7 +142,11 @@ export function StockAdjustmentForm({ onSubmit }: StockAdjustmentFormProps) {
                 <button
                   key={type}
                   type="button"
-                  onClick={() => setAdjustmentType(type)}
+                  onClick={() => {
+                    setAdjustmentType(type)
+                    setSuccessMessage(null)
+                    setFormError(null)
+                  }}
                   className={`p-3 rounded-lg border-2 transition-colors capitalize ${adjustmentType === type
                       ? 'border-primary bg-primary/5'
                       : 'border-border hover:border-primary/50'
@@ -133,7 +168,7 @@ export function StockAdjustmentForm({ onSubmit }: StockAdjustmentFormProps) {
               <SelectContent>
                 {availableItems.map((item) => (
                   <SelectItem key={item.id} value={item.id}>
-                    {item.name} ({item.sku})
+                    {item.name} ({item.sku}) — Qty: {item.quantity}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -152,8 +187,8 @@ export function StockAdjustmentForm({ onSubmit }: StockAdjustmentFormProps) {
             />
           </div>
 
-          {/* Branch Selection - Only for admin */}
-          {adjustmentType !== 'correction' && (
+          {/* Branch Selection - Only for admin (non-transfer) */}
+          {adjustmentType !== 'transfer' && (
             <div>
               <label className="text-sm font-medium block mb-2">Branch *</label>
               {isAdmin ? (
@@ -176,7 +211,7 @@ export function StockAdjustmentForm({ onSubmit }: StockAdjustmentFormProps) {
           )}
 
           {/* Transfer Branches */}
-          {adjustmentType === 'correction' && (
+          {adjustmentType === 'transfer' && (
             <>
               <div>
                 <label className="text-sm font-medium block mb-2">From Branch *</label>
@@ -230,10 +265,11 @@ export function StockAdjustmentForm({ onSubmit }: StockAdjustmentFormProps) {
 
           {/* Buttons */}
           <div className="flex gap-3">
-            <Button type="submit" className="flex-1">
+            <Button type="submit" className="flex-1" disabled={isSubmitting}>
+              {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Submit Adjustment
             </Button>
-            <Button type="button" variant="outline" onClick={resetForm} className="flex-1">
+            <Button type="button" variant="outline" onClick={resetForm} className="flex-1" disabled={isSubmitting}>
               Reset
             </Button>
           </div>

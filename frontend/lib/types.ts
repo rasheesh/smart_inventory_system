@@ -74,7 +74,7 @@ export interface Alert {
 export interface StockAdjustmentPayload {
   itemId: string
   quantity: number
-  adjustmentType: 'add' | 'remove' | 'correction'
+  adjustmentType: 'add' | 'remove' | 'transfer'
   reason: string
   fromBranch?: string
   toBranch?: string
