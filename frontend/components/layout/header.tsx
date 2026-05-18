@@ -1,15 +1,15 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { Bell, Search, User, ChevronDown, LogOut } from 'lucide-react'
+import { Search, ChevronDown, LogOut } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { NotificationDropdown } from '@/components/layout/notification-dropdown'
 import { useAuth } from '@/lib/auth-context'
 
 export function Header() {
@@ -23,10 +23,6 @@ export function Header() {
 
   const handleGlobalSearch = (query: string): void => {
     // TODO: implement global search
-  }
-
-  const handleViewProfile = (): void => {
-    // TODO: navigate to profile page
   }
 
   const getInitials = (name?: string) => {
@@ -63,10 +59,7 @@ export function Header() {
       {/* Right Side Actions */}
       <div className="flex items-center gap-4">
         {/* Notifications */}
-        <button className="relative p-2 text-muted-foreground hover:text-foreground transition-colors hover:bg-secondary rounded-lg">
-          <Bell className="w-5 h-5" />
-          <span className="absolute top-1 right-1 w-2 h-2 bg-status-critical rounded-full"></span>
-        </button>
+        <NotificationDropdown />
 
         {/* User Menu */}
         <DropdownMenu>
@@ -83,11 +76,6 @@ export function Header() {
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuItem className="flex items-center gap-2 cursor-pointer" onClick={handleViewProfile}>
-              <User className="w-4 h-4" />
-              <span>Profile</span>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
             <DropdownMenuItem
               className="flex items-center gap-2 cursor-pointer text-destructive"
               onClick={handleLogout}

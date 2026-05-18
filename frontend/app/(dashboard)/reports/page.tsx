@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Download, Filter, TrendingUp } from 'lucide-react'
+import { Download, Filter, FileText } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -19,6 +19,7 @@ import { canViewReportPreview, canAccessAllBranches, canAccessPage } from '@/lib
 import type { InventoryItem, Branch, ReportFilters } from '@/lib/types'
 import { fetchInventoryItems } from '@/lib/api/inventory'
 import { fetchBranches } from '@/lib/api/branches'
+import { exportInventoryReportPDF, exportInventoryReportExcel } from '@/lib/export-utils'
 
 export default function ReportsPage() {
   const { user } = useAuth()
@@ -69,11 +70,23 @@ export default function ReportsPage() {
   }
 
   function handleGenerateReport(filters: ReportFilters): void {
-    // TODO: call report generation API
+    // Generate PDF report from current filtered items
+    exportInventoryReportPDF(filteredItems, {
+      branch: filters.branchId || 'All Branches',
+      dateFrom: filters.dateFrom,
+      dateTo: filters.dateTo,
+      reportType: filters.reportType,
+    })
   }
 
   function handleExportReport(filters: ReportFilters): void {
-    // TODO: call export API and trigger file download
+    // Export to Excel from current filtered items
+    exportInventoryReportExcel(filteredItems, {
+      branch: filters.branchId || 'All Branches',
+      dateFrom: filters.dateFrom,
+      dateTo: filters.dateTo,
+      reportType: filters.reportType,
+    })
   }
 
   return (
@@ -159,8 +172,8 @@ export default function ReportsPage() {
                 reportType: reportType as ReportFilters['reportType'],
               })}
             >
-              <Filter className="w-4 h-4 mr-2" />
-              Generate Report
+              <FileText className="w-4 h-4 mr-2" />
+              Generate PDF
             </Button>
             <Button
               variant="outline"

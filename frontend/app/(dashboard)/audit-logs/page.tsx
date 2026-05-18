@@ -24,6 +24,7 @@ import {
 import { useAuth } from '@/lib/auth-context'
 import { fetchActivities, fetchAuditLogStats } from '@/lib/api/activities'
 import { fetchBranches } from '@/lib/api/branches'
+import { exportAuditLogsExcel } from '@/lib/export-utils'
 import type { Activity, ActivityFilters, AdvancedActivityFilters, AuditLogStats } from '@/lib/types'
 
 const ACTION_OPTIONS = [
@@ -158,7 +159,8 @@ export default function AuditLogsPage() {
   }
 
   function handleExportAuditLogs(): void {
-    // TODO: call export API and trigger file download
+    // Export current filtered activities to Excel
+    exportAuditLogsExcel(activities)
   }
 
   return (
