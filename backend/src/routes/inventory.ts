@@ -14,13 +14,14 @@ import {
 
 const router = Router()
 
-const validStatuses = ['normal', 'low_stock', 'expiring', 'expired'] as const
+const validStatuses = ['normal', 'low_stock', 'expiring', 'out_of_stock', 'expired'] as const
 
 // ─── Frontend ↔ backend status mapping ────────────────────────────────────────
 
 function toFrontendStatus(status: string): string {
   const map: Record<string, string> = {
     low_stock: 'low-stock',
+    out_of_stock: 'out-of-stock',
     normal: 'normal',
     expiring: 'expiring',
     expired: 'expired',
@@ -31,6 +32,7 @@ function toFrontendStatus(status: string): string {
 function toBackendStatus(status: string): string {
   const map: Record<string, string> = {
     'low-stock': 'low_stock',
+    'out-of-stock': 'out_of_stock',
     normal: 'normal',
     expiring: 'expiring',
     expired: 'expired',
@@ -64,12 +66,12 @@ const createItemSchema = z.object({
 const updateItemSchema = z.object({
   name: z.string().min(1).optional(),
   sku: z.string().min(1).optional(),
+  quantity: z.number().int().min(0).optional(),
   price: z.number().min(0).optional(),
   reorderLevel: z.number().int().min(0).optional(),
   expiryDate: z.string().min(1).optional(),
   supplier: z.string().min(1).optional(),
   branch: z.string().min(1).optional(),
-  status: z.enum(validStatuses).optional(),
 })
 
 // ─── GET /api/inventory ───────────────────────────────────────────────────────
@@ -148,12 +150,9 @@ router.put('/:id', authenticate, requireMinRole('branch-manager'), async (req, r
   }
 
   try {
-    const updateData: any = { ...parsed.data }
+    const updateData: Record<string, unknown> = { ...parsed.data }
     if (parsed.data.expiryDate) {
       updateData.expiryDate = new Date(parsed.data.expiryDate)
-    }
-    if (parsed.data.status) {
-      updateData.status = toBackendStatus(parsed.data.status)
     }
 
     const item = await updateInventoryItem(

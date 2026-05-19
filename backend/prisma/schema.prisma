@@ -18,6 +18,7 @@ enum ItemStatus {
   normal
   low_stock
   expiring
+  out_of_stock
   expired
 }
 

@@ -1,5 +1,7 @@
 import { prisma } from '../lib/prisma'
 import { logActivity } from './activity.service'
+import { computeItemStatus } from '../lib/item-status'
+import { ItemStatus } from '@prisma/client'
 import { z } from 'zod'
 
 export const stockAdjustmentSchema = z.object({
@@ -86,6 +88,10 @@ export async function createStockAdjustment(input: StockAdjustmentInput, actingU
         ? 'Removed'
         : 'Transferred'
 
+  // Compute new quantity and status before the transaction
+  const newQuantity = item.quantity + quantityDelta
+  const newStatus = computeItemStatus(newQuantity, item.reorderLevel, item.expiryDate)
+
   return prisma.$transaction(async (tx) => {
     const adjustment = await tx.stockAdjustment.create({
       data: {
@@ -99,10 +105,16 @@ export async function createStockAdjustment(input: StockAdjustmentInput, actingU
         user: user.name,
       },
     })
-    await tx.inventoryItem.update({
-      where: { id: input.itemId },
-      data: { quantity: { increment: quantityDelta } },
-    })
+
+    // Use raw SQL to update quantity + status together.
+    // This bypasses the stale Prisma generated enum (which may not include
+    // out_of_stock until `prisma generate` is re-run after schema changes).
+    await tx.$executeRaw`
+      UPDATE "InventoryItem"
+      SET quantity = ${newQuantity}, status = ${newStatus}::"ItemStatus"
+      WHERE id = ${input.itemId}
+    `
+
     await logActivity(
       {
         userId: actingUserId,

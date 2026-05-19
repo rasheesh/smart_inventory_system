@@ -49,6 +49,13 @@ export function StockAdjustmentForm({ onSubmit }: StockAdjustmentFormProps) {
   const [formError, setFormError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
+  // Refresh the item list so quantities and statuses stay current
+  const refreshItems = () => {
+    fetchInventoryItems()
+      .then(setInventoryItems)
+      .catch(() => {})
+  }
+
   // Filter items based on user branch
   const availableItems = isAdmin
     ? inventoryItems
@@ -92,6 +99,8 @@ export function StockAdjustmentForm({ onSubmit }: StockAdjustmentFormProps) {
       await onSubmit?.(formData)
       setSuccessMessage('Stock adjustment submitted successfully!')
       resetForm()
+      // Re-fetch items so the dropdown reflects updated quantities and statuses
+      refreshItems()
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to submit adjustment'
       setFormError(message)

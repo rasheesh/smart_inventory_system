@@ -17,9 +17,10 @@ interface InventoryTableProps {
 }
 
 const statusConfig: Record<string, { label: string; color: string }> = {
-  normal: { label: 'Normal', color: 'status-normal' },
+  normal: { label: 'Sufficient Stock', color: 'status-normal' },
   'low-stock': { label: 'Low Stock', color: 'status-warning' },
-  expiring: { label: 'Expiring', color: 'status-critical' },
+  'out-of-stock': { label: 'No Stock', color: 'status-critical' },
+  expiring: { label: 'Expiring Soon', color: 'status-critical' },
   expired: { label: 'Expired', color: 'status-critical' },
 }
 
