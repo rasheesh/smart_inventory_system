@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { authenticate } from '../middleware/auth'
 import { requireRole } from '../middleware/rbac'
+import { isStrongPassword, PASSWORD_REQUIREMENTS_MESSAGE } from '../lib/password'
 import { getUsers, createUser, updateUser, deleteUser } from '../services/user.service'
 
 const router = Router()
@@ -19,11 +20,15 @@ function toBackendRole(role: string): 'admin' | 'branch_manager' | 'staff' {
 
 // ─── Validation schemas ───────────────────────────────────────────────────────
 
+const passwordSchema = z
+  .string()
+  .refine(isStrongPassword, { message: PASSWORD_REQUIREMENTS_MESSAGE })
+
 const createUserSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   email: z.string().email('Invalid email address'),
   username: z.string().min(3, 'Username must be at least 3 characters'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
+  password: passwordSchema,
   role: z.enum(['admin', 'branch-manager', 'staff']),
   assignedBranch: z.string().min(1, 'Branch is required'),
   status: z.enum(['active', 'inactive']).optional(),
@@ -33,11 +38,20 @@ const updateUserSchema = z.object({
   name: z.string().min(1).optional(),
   email: z.string().email().optional(),
   username: z.string().min(3).optional(),
-  password: z.string().min(6).optional(),
+  password: passwordSchema.optional(),
   role: z.enum(['admin', 'branch-manager', 'staff']).optional(),
   assignedBranch: z.string().min(1).optional(),
   status: z.enum(['active', 'inactive']).optional(),
 })
+
+function validationResponse(error: z.ZodError) {
+  const flattened = error.flatten()
+  const passwordError = flattened.fieldErrors.password?.[0]
+  return {
+    message: passwordError ?? 'Validation error',
+    errors: flattened,
+  }
+}
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
@@ -56,7 +70,7 @@ router.get('/', authenticate, requireRole('admin'), async (_req, res) => {
 router.post('/', authenticate, requireRole('admin'), async (req, res) => {
   const parsed = createUserSchema.safeParse(req.body)
   if (!parsed.success) {
-    res.status(400).json({ message: 'Validation error', errors: parsed.error.flatten() })
+    res.status(400).json(validationResponse(parsed.error))
     return
   }
 
@@ -96,7 +110,7 @@ router.post('/', authenticate, requireRole('admin'), async (req, res) => {
 router.put('/:id', authenticate, requireRole('admin'), async (req, res) => {
   const parsed = updateUserSchema.safeParse(req.body)
   if (!parsed.success) {
-    res.status(400).json({ message: 'Validation error', errors: parsed.error.flatten() })
+    res.status(400).json(validationResponse(parsed.error))
     return
   }
 
@@ -113,6 +127,10 @@ router.put('/:id', authenticate, requireRole('admin'), async (req, res) => {
     res.json({ ...user, role: toFrontendRole(user.role) })
   } catch (err: unknown) {
     const e = err as { status?: number; message?: string; code?: string }
+    if (e.status === 400) {
+      res.status(400).json({ message: e.message ?? 'Bad request' })
+      return
+    }
     if (e.status === 404 || e.code === 'P2025') {
       res.status(404).json({ message: e.message ?? 'User not found' })
       return

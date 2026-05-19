@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma'
 import bcrypt from 'bcryptjs'
+import { PASSWORD_UNCHANGED_MESSAGE } from '../lib/password'
 import { describeChangedFields, logActivity } from './activity.service'
 
 export async function getUsers() {
@@ -108,6 +109,10 @@ export async function updateUser(id: string, data: UpdateUserData, actingUserId:
   if (data.assignedBranch !== undefined) updatePayload.assignedBranch = data.assignedBranch
   if (data.status !== undefined) updatePayload.status = data.status
   if (data.password) {
+    const isSamePassword = await bcrypt.compare(data.password, existing.passwordHash)
+    if (isSamePassword) {
+      throw { status: 400, message: PASSWORD_UNCHANGED_MESSAGE }
+    }
     updatePayload.passwordHash = await bcrypt.hash(data.password, 10)
   }
 
