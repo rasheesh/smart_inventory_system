@@ -10,24 +10,32 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { fetchAlerts } from '@/lib/api/alerts'
+import { useAuth } from '@/lib/auth-context'
+import { canAccessAllBranches } from '@/lib/permissions'
 import type { Alert } from '@/lib/types'
 import { formatDistanceToNow } from 'date-fns'
 
 export function NotificationDropdown() {
+  const { user } = useAuth()
+  const isAdmin = user?.role ? canAccessAllBranches(user.role) : false
   const [alerts, setAlerts] = useState<Alert[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isOpen, setIsOpen] = useState(false)
 
   useEffect(() => {
+    if (!user) return
     loadAlerts()
-  }, [])
+  }, [user, isAdmin])
 
   const loadAlerts = async () => {
     try {
       setIsLoading(true)
       const data = await fetchAlerts()
+      const scopedAlerts = isAdmin
+        ? data
+        : data.filter((alert) => alert.branch === user?.branch)
       // Sort by timestamp descending and take top 10
-      const sortedAlerts = data
+      const sortedAlerts = scopedAlerts
         .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
         .slice(0, 10)
       setAlerts(sortedAlerts)

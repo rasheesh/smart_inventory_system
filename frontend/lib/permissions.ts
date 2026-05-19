@@ -46,7 +46,7 @@ export const getPagePermissions = (role: UserRole): PagePermissions => {
       inventory: true,
       stockOperations: true,
       branches: false,
-      notifications: false,
+      notifications: true,
       reports: false,
       userManagement: false,
       auditLogs: false,
