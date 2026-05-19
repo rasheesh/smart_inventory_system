@@ -12,7 +12,6 @@ export function exportInventoryReportPDF(
     branch?: string
     dateFrom?: string
     dateTo?: string
-    reportType?: string
   }
 ) {
   const doc = new jsPDF()
@@ -92,7 +91,6 @@ export function exportInventoryReportExcel(
     branch?: string
     dateFrom?: string
     dateTo?: string
-    reportType?: string
   }
 ) {
   // Prepare data

@@ -113,7 +113,6 @@ export interface ReportFilters {
   dateFrom: string
   dateTo: string
   branchId: string | null
-  reportType?: 'inventory' | 'movement' | 'expiring' | 'branch'
 }
 
 // ─── API return types ─────────────────────────────────────────────────────────
