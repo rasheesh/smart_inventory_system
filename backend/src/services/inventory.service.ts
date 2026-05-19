@@ -7,11 +7,11 @@ import { describeChangedFields, logActivity } from './activity.service'
 /**
  * Compute ItemStatus from quantity, reorderLevel, and expiryDate.
  * Rules (priority order):
- *  1. expiryDate within 3 days  → expiring
- *  2. expiryDate in the past    → expired
- *  3. quantity === 0            → low_stock  (displayed as "No Stock" on frontend)
- *  4. quantity <= reorderLevel  → low_stock
- *  5. quantity > reorderLevel   → normal
+ *  1. expiryDate within 3 days  → expiring   (RED, overrides everything)
+ *  2. expiryDate in the past    → expired    (RED)
+ *  3. quantity === 0            → out_of_stock (RED, "No Stock")
+ *  4. quantity <= reorderLevel  → low_stock  (ORANGE)
+ *  5. quantity > reorderLevel   → normal     (GREEN)
  */
 function computeItemStatus(quantity: number, reorderLevel: number, expiryDate: Date): ItemStatus {
   const now = new Date()
@@ -20,6 +20,7 @@ function computeItemStatus(quantity: number, reorderLevel: number, expiryDate: D
 
   if (daysUntilExpiry >= 0 && daysUntilExpiry <= 3) return ItemStatus.expiring
   if (daysUntilExpiry < 0) return ItemStatus.expired
+  if (quantity === 0) return ItemStatus.out_of_stock
   if (quantity <= reorderLevel) return ItemStatus.low_stock
   return ItemStatus.normal
 }

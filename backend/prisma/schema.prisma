@@ -17,6 +17,7 @@ enum UserRole {
 enum ItemStatus {
   normal
   low_stock
+  out_of_stock
   expiring
   expired
 }

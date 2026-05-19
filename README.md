@@ -135,6 +135,14 @@ npm run dev --prefix frontend
 
 ## Troubleshooting
 
+### `Value 'out_of_stock' not found in enum 'ItemStatus'`
+This means the DB has `out_of_stock` rows but your local Prisma client doesn't know about it yet. Run:
+```bash
+npm install --prefix backend        # triggers prisma generate via postinstall
+npm run migrate --prefix backend    # applies the out_of_stock migration
+```
+Then restart the backend.
+
 ### `@prisma/client` errors or missing types after pulling
 ```bash
 npm install --prefix backend

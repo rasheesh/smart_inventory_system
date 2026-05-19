@@ -12,6 +12,7 @@ function computeItemStatus(quantity: number, reorderLevel: number, expiryDate: D
 
   if (daysUntilExpiry >= 0 && daysUntilExpiry <= 3) return ItemStatus.expiring
   if (daysUntilExpiry < 0) return ItemStatus.expired
+  if (quantity === 0) return ItemStatus.out_of_stock
   if (quantity <= reorderLevel) return ItemStatus.low_stock
   return ItemStatus.normal
 }

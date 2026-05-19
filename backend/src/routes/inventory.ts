@@ -14,14 +14,15 @@ import {
 
 const router = Router()
 
-const validStatuses = ['normal', 'low_stock', 'expiring', 'expired'] as const
+const validStatuses = ['normal', 'low_stock', 'out_of_stock', 'expiring', 'expired'] as const
 
 // ─── Frontend ↔ backend status mapping ────────────────────────────────────────
 
 function toFrontendStatus(status: string): string {
   const map: Record<string, string> = {
-    low_stock: 'low-stock',
     normal: 'normal',
+    low_stock: 'low-stock',
+    out_of_stock: 'out-of-stock',
     expiring: 'expiring',
     expired: 'expired',
   }
@@ -30,8 +31,9 @@ function toFrontendStatus(status: string): string {
 
 function toBackendStatus(status: string): string {
   const map: Record<string, string> = {
-    'low-stock': 'low_stock',
     normal: 'normal',
+    'low-stock': 'low_stock',
+    'out-of-stock': 'out_of_stock',
     expiring: 'expiring',
     expired: 'expired',
   }
