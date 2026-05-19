@@ -78,11 +78,19 @@ export default function ReportsPage() {
   }
 
   function handleExportReport(filters: ReportFilters): void {
-    // Export to Excel from current filtered items
+    const branchScopeLabel =
+      isAdmin && selectedBranch === 'all'
+        ? 'All items combined'
+        : `Items in ${isAdmin ? selectedBranch : user?.branch}`
+
     exportInventoryReportExcel(filteredItems, {
       branch: filters.branchId || 'All Branches',
       dateFrom: filters.dateFrom,
       dateTo: filters.dateTo,
+      branchScopeLabel,
+      totalInventoryValue: formatPeso(totalValue),
+      lowStockValue: formatPeso(lowStockValue),
+      atRiskValue: formatPeso(expiringValue),
     })
   }
 
