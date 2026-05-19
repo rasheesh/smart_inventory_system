@@ -17,10 +17,18 @@ interface InventoryTableProps {
 }
 
 const statusConfig: Record<string, { label: string; color: string }> = {
-  normal: { label: 'Normal', color: 'status-normal' },
+  normal: { label: 'Sufficient Stock', color: 'status-normal' },
   'low-stock': { label: 'Low Stock', color: 'status-warning' },
-  expiring: { label: 'Expiring', color: 'status-critical' },
+  expiring: { label: 'Expiring Soon', color: 'status-critical' },
   expired: { label: 'Expired', color: 'status-critical' },
+}
+
+function getStatusDisplay(item: InventoryItem): { label: string; color: string } {
+  // Quantity 0 always shows as No Stock (RED) regardless of DB status
+  if (item.quantity === 0) {
+    return { label: 'No Stock', color: 'status-critical' }
+  }
+  return statusConfig[item.status] ?? { label: item.status, color: 'status-warning' }
 }
 
 export function InventoryTable({
@@ -178,8 +186,8 @@ export function InventoryTable({
                     <TableCell className="text-sm">{item.supplier}</TableCell>
                     <TableCell className="text-sm">{item.branch}</TableCell>
                     <TableCell>
-                      <span className={`status-badge ${statusConfig[item.status]?.color || 'bg-gray-100 text-gray-800'}`}>
-                        {statusConfig[item.status]?.label || item.status}
+                      <span className={`status-badge ${getStatusDisplay(item).color}`}>
+                        {getStatusDisplay(item).label}
                       </span>
                     </TableCell>
                     <TableCell className="text-right">

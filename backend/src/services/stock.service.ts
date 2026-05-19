@@ -1,6 +1,20 @@
 import { prisma } from '../lib/prisma'
 import { logActivity } from './activity.service'
+import { ItemStatus } from '@prisma/client'
 import { z } from 'zod'
+
+// ─── Status computation (same rules as inventory.service.ts) ─────────────────
+
+function computeItemStatus(quantity: number, reorderLevel: number, expiryDate: Date): ItemStatus {
+  const now = new Date()
+  const msPerDay = 1000 * 60 * 60 * 24
+  const daysUntilExpiry = (expiryDate.getTime() - now.getTime()) / msPerDay
+
+  if (daysUntilExpiry >= 0 && daysUntilExpiry <= 3) return ItemStatus.expiring
+  if (daysUntilExpiry < 0) return ItemStatus.expired
+  if (quantity <= reorderLevel) return ItemStatus.low_stock
+  return ItemStatus.normal
+}
 
 export const stockAdjustmentSchema = z.object({
   itemId: z.string().min(1, 'itemId is required'),
@@ -99,10 +113,15 @@ export async function createStockAdjustment(input: StockAdjustmentInput, actingU
         user: user.name,
       },
     })
+
+    const newQuantity = item.quantity + quantityDelta
+    const newStatus = computeItemStatus(newQuantity, item.reorderLevel, item.expiryDate)
+
     await tx.inventoryItem.update({
       where: { id: input.itemId },
-      data: { quantity: { increment: quantityDelta } },
+      data: { quantity: newQuantity, status: newStatus },
     })
+
     await logActivity(
       {
         userId: actingUserId,

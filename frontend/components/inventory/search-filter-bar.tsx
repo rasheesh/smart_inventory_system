@@ -93,9 +93,9 @@ export function SearchFilterBar({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="normal">Normal</SelectItem>
+            <SelectItem value="normal">Sufficient Stock</SelectItem>
             <SelectItem value="low-stock">Low Stock</SelectItem>
-            <SelectItem value="expiring">Expiring</SelectItem>
+            <SelectItem value="expiring">Expiring Soon</SelectItem>
             <SelectItem value="expired">Expired</SelectItem>
           </SelectContent>
         </Select>

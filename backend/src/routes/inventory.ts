@@ -64,12 +64,12 @@ const createItemSchema = z.object({
 const updateItemSchema = z.object({
   name: z.string().min(1).optional(),
   sku: z.string().min(1).optional(),
+  quantity: z.number().int().min(0).optional(),
   price: z.number().min(0).optional(),
   reorderLevel: z.number().int().min(0).optional(),
   expiryDate: z.string().min(1).optional(),
   supplier: z.string().min(1).optional(),
   branch: z.string().min(1).optional(),
-  status: z.enum(validStatuses).optional(),
 })
 
 // ─── GET /api/inventory ───────────────────────────────────────────────────────
@@ -148,12 +148,9 @@ router.put('/:id', authenticate, requireMinRole('branch-manager'), async (req, r
   }
 
   try {
-    const updateData: any = { ...parsed.data }
+    const updateData: Record<string, unknown> = { ...parsed.data }
     if (parsed.data.expiryDate) {
       updateData.expiryDate = new Date(parsed.data.expiryDate)
-    }
-    if (parsed.data.status) {
-      updateData.status = toBackendStatus(parsed.data.status)
     }
 
     const item = await updateInventoryItem(

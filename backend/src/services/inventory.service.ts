@@ -2,6 +2,28 @@ import { prisma } from '../lib/prisma'
 import { ItemStatus, Prisma } from '@prisma/client'
 import { describeChangedFields, logActivity } from './activity.service'
 
+// ─── Status computation ───────────────────────────────────────────────────────
+
+/**
+ * Compute ItemStatus from quantity, reorderLevel, and expiryDate.
+ * Rules (priority order):
+ *  1. expiryDate within 3 days  → expiring
+ *  2. expiryDate in the past    → expired
+ *  3. quantity === 0            → low_stock  (displayed as "No Stock" on frontend)
+ *  4. quantity <= reorderLevel  → low_stock
+ *  5. quantity > reorderLevel   → normal
+ */
+function computeItemStatus(quantity: number, reorderLevel: number, expiryDate: Date): ItemStatus {
+  const now = new Date()
+  const msPerDay = 1000 * 60 * 60 * 24
+  const daysUntilExpiry = (expiryDate.getTime() - now.getTime()) / msPerDay
+
+  if (daysUntilExpiry >= 0 && daysUntilExpiry <= 3) return ItemStatus.expiring
+  if (daysUntilExpiry < 0) return ItemStatus.expired
+  if (quantity <= reorderLevel) return ItemStatus.low_stock
+  return ItemStatus.normal
+}
+
 export interface InventoryFilters {
   branchId?: string
   status?: ItemStatus
@@ -168,21 +190,8 @@ export interface CreateInventoryItemData {
 }
 
 export async function createInventoryItem(data: CreateInventoryItemData, actingUserId: string) {
-  // Auto-determine status if not provided
-  let status = data.status
-  if (!status) {
-    const now = new Date()
-    const daysUntilExpiry = (data.expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
-    if (daysUntilExpiry <= 0) {
-      status = ItemStatus.expired
-    } else if (daysUntilExpiry <= 30) {
-      status = ItemStatus.expiring
-    } else if (data.quantity <= data.reorderLevel) {
-      status = ItemStatus.low_stock
-    } else {
-      status = ItemStatus.normal
-    }
-  }
+  // Always compute — never trust caller-supplied status
+  const status = computeItemStatus(data.quantity, data.reorderLevel, data.expiryDate)
 
   return prisma.$transaction(async (tx) => {
     const item = await tx.inventoryItem.create({
@@ -232,12 +241,12 @@ export async function getInventoryItemsForExport(userRole: string, userBranch: s
 export interface UpdateInventoryItemData {
   name?: string
   sku?: string
+  quantity?: number
   price?: number
   reorderLevel?: number
   expiryDate?: Date
   supplier?: string
   branch?: string
-  status?: ItemStatus
 }
 
 export async function updateInventoryItem(
@@ -250,10 +259,16 @@ export async function updateInventoryItem(
     throw { status: 404, message: 'Item not found' }
   }
 
+  // Merge with existing values then recompute status
+  const newQuantity = data.quantity !== undefined ? data.quantity : existing.quantity
+  const newReorderLevel = data.reorderLevel !== undefined ? data.reorderLevel : existing.reorderLevel
+  const newExpiryDate = data.expiryDate !== undefined ? data.expiryDate : existing.expiryDate
+  const newStatus = computeItemStatus(newQuantity, newReorderLevel, newExpiryDate)
+
   return prisma.$transaction(async (tx) => {
     const item = await tx.inventoryItem.update({
       where: { id },
-      data,
+      data: { ...data, status: newStatus },
     })
     await logActivity(
       {
