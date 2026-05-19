@@ -1,6 +1,11 @@
 import { prisma } from '../lib/prisma'
 import bcrypt from 'bcryptjs'
 import { describeChangedFields, logActivity } from './activity.service'
+import {
+  isValidPassword,
+  PASSWORD_REQUIREMENTS_MESSAGE,
+  PASSWORD_SAME_AS_BEFORE_MESSAGE,
+} from '../utils/password-validation'
 
 export async function getUsers() {
   return prisma.user.findMany({
@@ -45,6 +50,10 @@ export interface CreateUserData {
 }
 
 export async function createUser(data: CreateUserData, actingUserId: string) {
+  if (!isValidPassword(data.password)) {
+    throw { status: 400, message: PASSWORD_REQUIREMENTS_MESSAGE }
+  }
+
   const passwordHash = await bcrypt.hash(data.password, 10)
 
   return prisma.$transaction(async (tx) => {
@@ -108,6 +117,15 @@ export async function updateUser(id: string, data: UpdateUserData, actingUserId:
   if (data.assignedBranch !== undefined) updatePayload.assignedBranch = data.assignedBranch
   if (data.status !== undefined) updatePayload.status = data.status
   if (data.password) {
+    if (!isValidPassword(data.password)) {
+      throw { status: 400, message: PASSWORD_REQUIREMENTS_MESSAGE }
+    }
+
+    const isSamePassword = await bcrypt.compare(data.password, existing.passwordHash)
+    if (isSamePassword) {
+      throw { status: 400, message: PASSWORD_SAME_AS_BEFORE_MESSAGE }
+    }
+
     updatePayload.passwordHash = await bcrypt.hash(data.password, 10)
   }
 

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Download, Filter, FileText } from 'lucide-react'
+import { Download, FileText } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -36,7 +36,6 @@ export default function ReportsPage() {
 
   if (user && !canAccessPage(user.role, 'reports')) return null
 
-  const [reportType, setReportType] = useState('inventory')
   const [selectedBranch, setSelectedBranch] = useState(isAdmin ? 'all' : (user?.branch || ''))
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
@@ -75,17 +74,23 @@ export default function ReportsPage() {
       branch: filters.branchId || 'All Branches',
       dateFrom: filters.dateFrom,
       dateTo: filters.dateTo,
-      reportType: filters.reportType,
     })
   }
 
   function handleExportReport(filters: ReportFilters): void {
-    // Export to Excel from current filtered items
+    const branchScopeLabel =
+      isAdmin && selectedBranch === 'all'
+        ? 'All items combined'
+        : `Items in ${isAdmin ? selectedBranch : user?.branch}`
+
     exportInventoryReportExcel(filteredItems, {
       branch: filters.branchId || 'All Branches',
       dateFrom: filters.dateFrom,
       dateTo: filters.dateTo,
-      reportType: filters.reportType,
+      branchScopeLabel,
+      totalInventoryValue: formatPeso(totalValue),
+      lowStockValue: formatPeso(lowStockValue),
+      atRiskValue: formatPeso(expiringValue),
     })
   }
 
@@ -107,22 +112,7 @@ export default function ReportsPage() {
           <CardTitle>Report Filters</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div>
-              <label className="text-sm font-medium block mb-2">Report Type</label>
-              <Select value={reportType} onValueChange={setReportType}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="inventory">Inventory Report</SelectItem>
-                  <SelectItem value="movement">Stock Movement</SelectItem>
-                  <SelectItem value="expiring">Expiring Products</SelectItem>
-                  <SelectItem value="branch">Branch Summary</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="text-sm font-medium block mb-2">Branch</label>
               {isAdmin ? (
@@ -169,7 +159,6 @@ export default function ReportsPage() {
                 dateFrom: startDate,
                 dateTo: endDate,
                 branchId: selectedBranch === 'all' ? null : selectedBranch,
-                reportType: reportType as ReportFilters['reportType'],
               })}
             >
               <FileText className="w-4 h-4 mr-2" />
@@ -181,7 +170,6 @@ export default function ReportsPage() {
                 dateFrom: startDate,
                 dateTo: endDate,
                 branchId: selectedBranch === 'all' ? null : selectedBranch,
-                reportType: reportType as ReportFilters['reportType'],
               })}
             >
               <Download className="w-4 h-4 mr-2" />

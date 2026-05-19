@@ -3,6 +3,14 @@ import autoTable from 'jspdf-autotable'
 import * as XLSX from 'xlsx'
 import type { InventoryItem, Activity } from './types'
 
+function formatPeso(value: number): string {
+  return `₱${value.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+function formatReportStatus(status: InventoryItem['status']): string {
+  return status.charAt(0).toUpperCase() + status.slice(1)
+}
+
 /**
  * Export inventory report to PDF
  */
@@ -12,7 +20,6 @@ export function exportInventoryReportPDF(
     branch?: string
     dateFrom?: string
     dateTo?: string
-    reportType?: string
   }
 ) {
   const doc = new jsPDF()
@@ -83,57 +90,80 @@ export function exportInventoryReportPDF(
   doc.save(filename)
 }
 
+export interface InventoryReportExcelOptions {
+  branch?: string
+  dateFrom?: string
+  dateTo?: string
+  branchScopeLabel: string
+  totalInventoryValue: string
+  lowStockValue: string
+  atRiskValue: string
+}
+
+const PREVIEW_ROW_LIMIT = 5
+
+function buildInventoryPreviewRows(items: InventoryItem[]): (string | number)[][] {
+  return items.slice(0, PREVIEW_ROW_LIMIT).map((item) => [
+    item.name,
+    item.sku,
+    item.quantity,
+    formatPeso(item.quantity * item.price),
+    formatReportStatus(item.status),
+  ])
+}
+
 /**
- * Export inventory report to Excel
+ * Export inventory report to Excel (matches Reports page layout and values)
  */
 export function exportInventoryReportExcel(
   items: InventoryItem[],
-  filters: {
-    branch?: string
-    dateFrom?: string
-    dateTo?: string
-    reportType?: string
-  }
+  options: InventoryReportExcelOptions
 ) {
-  // Prepare data
-  const data = items.map(item => ({
-    'Item Name': item.name,
-    'SKU': item.sku,
-    'Quantity': item.quantity,
-    'Price': item.price,
-    'Total Value': item.quantity * item.price,
-    'Reorder Level': item.reorderLevel,
-    'Expiry Date': new Date(item.expiryDate).toLocaleDateString('en-US'),
-    'Supplier': item.supplier,
-    'Branch': item.branch,
-    'Status': item.status.charAt(0).toUpperCase() + item.status.slice(1),
-    'Last Restocked': new Date(item.lastRestocked).toLocaleDateString('en-US'),
-  }))
-  
-  // Create workbook
-  const wb = XLSX.utils.book_new()
-  
-  // Add summary sheet
-  const summaryData = [
+  const sheetData: (string | number)[][] = [
     ['IntelliShelf - Inventory Report'],
     ['Generated:', new Date().toLocaleString('en-US')],
-    ['Branch:', filters.branch || 'All Branches'],
-    [''],
-    ['Summary'],
-    ['Total Items:', items.length],
-    ['Total Value:', `₱${items.reduce((sum, item) => sum + (item.quantity * item.price), 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`],
-    ['Low Stock Items:', items.filter(i => i.status === 'low-stock').length],
-    ['Expiring Soon:', items.filter(i => i.status === 'expiring').length],
+    ['Branch:', options.branch || 'All Branches'],
   ]
-  
-  const summaryWs = XLSX.utils.aoa_to_sheet(summaryData)
-  XLSX.utils.book_append_sheet(wb, summaryWs, 'Summary')
-  
-  // Add data sheet
-  const dataWs = XLSX.utils.json_to_sheet(data)
-  XLSX.utils.book_append_sheet(wb, dataWs, 'Inventory Data')
-  
-  // Save file
+
+  if (options.dateFrom || options.dateTo) {
+    sheetData.push([
+      'Date Range:',
+      `${options.dateFrom || 'Start'} to ${options.dateTo || 'End'}`,
+    ])
+  }
+
+  sheetData.push(
+    [''],
+    ['Total Inventory Value'],
+    [options.totalInventoryValue],
+    [options.branchScopeLabel],
+    [''],
+    ['Low Stock Value'],
+    [options.lowStockValue],
+    ['Needs reordering'],
+    [''],
+    ['At Risk Value'],
+    [options.atRiskValue],
+    ['Expiring soon'],
+    [''],
+    ['Inventory Report Preview'],
+    ['Sample data from current filters'],
+    [''],
+    ['Item', 'SKU', 'Quantity', 'Estimated Value', 'Status'],
+    ...buildInventoryPreviewRows(items),
+  )
+
+  const wb = XLSX.utils.book_new()
+  const ws = XLSX.utils.aoa_to_sheet(sheetData)
+  ws['!cols'] = [
+    { wch: 30 },
+    { wch: 16 },
+    { wch: 12 },
+    { wch: 18 },
+    { wch: 14 },
+  ]
+  XLSX.utils.book_append_sheet(wb, ws, 'Inventory Report Preview')
+
   const filename = `inventory_report_${new Date().toISOString().split('T')[0]}.xlsx`
   XLSX.writeFile(wb, filename)
 }
