@@ -1,7 +1,6 @@
 import { prisma } from '../lib/prisma'
 import { ItemStatus, Prisma } from '@prisma/client'
 import { describeChangedFields, logActivity } from './activity.service'
-import { computeItemStatus, ItemStatusValue } from '../lib/item-status'
 
 export interface InventoryFilters {
   branchId?: string
@@ -132,7 +131,7 @@ export async function getExpirationTimeline(): Promise<ExpirationTimelinePeriod[
   ])
 
   const isCritical = (status: ItemStatus) =>
-    status === ('expired' as ItemStatus) || status === ('expiring' as ItemStatus)
+    status === ItemStatus.expired || status === ItemStatus.expiring
 
   return [
     {
@@ -169,12 +168,23 @@ export interface CreateInventoryItemData {
 }
 
 export async function createInventoryItem(data: CreateInventoryItemData, actingUserId: string) {
-  // Compute status using plain string literals — bypasses stale Prisma enum
-  const computedStatus = computeItemStatus(data.quantity, data.reorderLevel, data.expiryDate)
+  // Auto-determine status if not provided
+  let status = data.status
+  if (!status) {
+    const now = new Date()
+    const daysUntilExpiry = (data.expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+    if (daysUntilExpiry <= 0) {
+      status = ItemStatus.expired
+    } else if (daysUntilExpiry <= 30) {
+      status = ItemStatus.expiring
+    } else if (data.quantity <= data.reorderLevel) {
+      status = ItemStatus.low_stock
+    } else {
+      status = ItemStatus.normal
+    }
+  }
 
   return prisma.$transaction(async (tx) => {
-    // Create with a placeholder status that exists in the old Prisma client,
-    // then immediately overwrite with the correct status via raw SQL.
     const item = await tx.inventoryItem.create({
       data: {
         name: data.name,
@@ -185,19 +195,10 @@ export async function createInventoryItem(data: CreateInventoryItemData, actingU
         expiryDate: data.expiryDate,
         supplier: data.supplier,
         branch: data.branch,
-        status: 'normal' as ItemStatus, // placeholder — overwritten below
+        status,
         lastRestocked: data.lastRestocked ?? new Date(),
       },
     })
-
-    // Overwrite with the correctly computed status using raw SQL so
-    // out_of_stock works even before `prisma generate` is re-run.
-    await tx.$executeRaw`
-      UPDATE "InventoryItem"
-      SET status = ${computedStatus}::"ItemStatus"
-      WHERE id = ${item.id}
-    `
-
     await logActivity(
       {
         userId: actingUserId,
@@ -208,9 +209,7 @@ export async function createInventoryItem(data: CreateInventoryItemData, actingU
       },
       tx,
     )
-
-    // Return item with the correct status
-    return { ...item, status: computedStatus as unknown as ItemStatus }
+    return item
   })
 }
 
@@ -233,12 +232,12 @@ export async function getInventoryItemsForExport(userRole: string, userBranch: s
 export interface UpdateInventoryItemData {
   name?: string
   sku?: string
-  quantity?: number
   price?: number
   reorderLevel?: number
   expiryDate?: Date
   supplier?: string
   branch?: string
+  status?: ItemStatus
 }
 
 export async function updateInventoryItem(
@@ -251,31 +250,11 @@ export async function updateInventoryItem(
     throw { status: 404, message: 'Item not found' }
   }
 
-  // Merge incoming changes with existing values to compute the new status
-  const newQuantity = data.quantity !== undefined ? data.quantity : existing.quantity
-  const newReorderLevel = data.reorderLevel !== undefined ? data.reorderLevel : existing.reorderLevel
-  const newExpiryDate = data.expiryDate !== undefined ? data.expiryDate : existing.expiryDate
-
-  // Compute status as a plain string — bypasses stale Prisma enum
-  const computedStatus = computeItemStatus(newQuantity, newReorderLevel, newExpiryDate)
-
   return prisma.$transaction(async (tx) => {
-    // Update all non-status fields via Prisma ORM
     const item = await tx.inventoryItem.update({
       where: { id },
-      data: {
-        ...data,
-        status: 'normal' as ItemStatus, // placeholder — overwritten below
-      },
+      data,
     })
-
-    // Overwrite status with correctly computed value via raw SQL
-    await tx.$executeRaw`
-      UPDATE "InventoryItem"
-      SET status = ${computedStatus}::"ItemStatus"
-      WHERE id = ${id}
-    `
-
     await logActivity(
       {
         userId: actingUserId,
@@ -286,8 +265,7 @@ export async function updateInventoryItem(
       },
       tx,
     )
-
-    return { ...item, status: computedStatus as unknown as ItemStatus }
+    return item
   })
 }
 

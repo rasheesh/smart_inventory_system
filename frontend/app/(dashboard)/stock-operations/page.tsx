@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 import { StockAdjustmentForm } from '@/components/stock-ops/stock-adjustment-form'
 import { AdjustmentHistoryTable } from '@/components/stock-ops/adjustment-history-table'
 import { useAuth } from '@/lib/auth-context'
@@ -13,11 +13,11 @@ export default function StockOperationsPage() {
   const userCanTransfer = user?.role ? canTransferStock(user.role) : false
   const [refreshKey, setRefreshKey] = useState(0)
 
-  const handleStockAdjustmentSubmit = useCallback(async (payload: StockAdjustmentPayload): Promise<void> => {
+  const handleStockAdjustmentSubmit = async (payload: StockAdjustmentPayload): Promise<void> => {
     await submitStockAdjustment(payload)
-    // Bump key to refresh the history table
+    // Trigger history table refresh
     setRefreshKey(prev => prev + 1)
-  }, [])
+  }
 
   return (
     <div className="space-y-6">

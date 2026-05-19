@@ -10,7 +10,7 @@ export interface InventoryItem {
   expiryDate: Date
   supplier: string
   branch: string
-  status: 'normal' | 'low-stock' | 'out-of-stock' | 'expiring' | 'expired'
+  status: 'normal' | 'low-stock' | 'expiring' | 'expired'
   lastRestocked: Date
 }
 
