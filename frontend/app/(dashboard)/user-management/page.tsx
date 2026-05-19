@@ -29,6 +29,10 @@ import { Label } from '@/components/ui/label'
 import { useAuth } from '@/lib/auth-context'
 import { fetchUsers, createUserApi, updateUserApi, deleteUserApi } from '@/lib/api/users'
 import { fetchBranches } from '@/lib/api/branches'
+import {
+  isValidPassword,
+  PASSWORD_REQUIREMENTS_MESSAGE,
+} from '@/lib/password-validation'
 import type { User, Branch, UserRole } from '@/lib/types'
 
 const roleConfig: Record<string, { label: string; color: string }> = {
@@ -187,8 +191,8 @@ export default function UserManagementPage() {
       setFormError('Password is required for new users')
       return
     }
-    if (form.password && form.password.length < 6) {
-      setFormError('Password must be at least 6 characters')
+    if (form.password && !isValidPassword(form.password)) {
+      setFormError(PASSWORD_REQUIREMENTS_MESSAGE)
       return
     }
     if (!form.assignedBranch) {
@@ -225,7 +229,8 @@ export default function UserManagementPage() {
       setIsFormOpen(false)
       await loadUsers()
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to save user'
+      const message =
+        err instanceof Error ? err.message : 'Failed to save user'
       setFormError(message)
     } finally {
       setIsSaving(false)
