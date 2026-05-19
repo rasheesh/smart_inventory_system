@@ -27,13 +27,13 @@ router.post('/login', async (req, res) => {
     const user = await prisma.user.findUnique({ where: { username } })
 
     if (!user) {
-      res.status(401).json({ message: 'Invalid credentials' })
+      res.status(401).json({ message: 'Invalid username or password' })
       return
     }
 
     const passwordMatch = await bcrypt.compare(password, user.passwordHash)
     if (!passwordMatch) {
-      res.status(401).json({ message: 'Invalid credentials' })
+      res.status(401).json({ message: 'Invalid username or password' })
       return
     }
 

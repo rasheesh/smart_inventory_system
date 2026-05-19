@@ -49,7 +49,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     username: string,
     password: string,
   ): Promise<{ success: boolean; error?: string }> => {
-    setIsLoading(true)
+    // Use a local flag — do NOT touch the global isLoading so the layout
+    // guard does not re-evaluate and cause a flash/redirect during login.
     try {
       const res = await apiFetch('/api/auth/login', {
         method: 'POST',
@@ -74,13 +75,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       sessionStorage.setItem('auth_user', JSON.stringify(userData))
       setIsAuthenticated(true)
       setUser(userData)
-      setIsLoading(false)
       return { success: true }
     } catch (err: unknown) {
-      setIsLoading(false)
-      // Surface a user-friendly message without exposing internals
       const message =
-        err instanceof Error && err.message && !err.message.includes('Internal')
+        err instanceof Error && err.message
           ? err.message
           : 'Invalid username or password'
       return { success: false, error: message }

@@ -48,7 +48,8 @@ const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
  *
  * - Prepends NEXT_PUBLIC_API_URL to every path.
  * - Injects `Authorization: Bearer <token>` when a token is stored.
- * - On HTTP 401: clears the token and redirects to /login.
+ * - On HTTP 401 for authenticated routes: clears the token and redirects to /login.
+ * - On HTTP 401 for the login route itself: throws ApiError so the form can display the error.
  * - On non-2xx: throws ApiError with the parsed error message.
  * - On 2xx: returns the raw Response (caller parses JSON as needed).
  */
@@ -66,7 +67,11 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<Respon
     headers,
   })
 
-  if (res.status === 401) {
+  // A 401 on the login endpoint means wrong credentials — do NOT redirect,
+  // let the caller handle it so the form can display the error message.
+  const isLoginRoute = path === '/api/auth/login'
+
+  if (res.status === 401 && !isLoginRoute) {
     clearToken()
     redirectToLogin()
     throw new ApiError(401, 'Unauthorized — redirecting to login')

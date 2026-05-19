@@ -6,11 +6,12 @@ import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Eye, EyeOff } from 'lucide-react';
 
 export function LoginForm() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -22,16 +23,22 @@ export function LoginForm() {
     setError('');
     setIsLoading(true);
 
-    const success = await login(username, password);
+    const result = await login(username, password);
 
-    if (success) {
+    if (result.success) {
       router.push('/');
     } else {
-      setError('Invalid username or password');
+      setError(result.error ?? 'Invalid username or password');
+      // Clear password and ensure it stays masked on failure
       setPassword('');
+      setShowPassword(false);
     }
 
     setIsLoading(false);
+  };
+
+  const togglePasswordVisibility = () => {
+    setShowPassword((prev) => !prev);
   };
 
   return (
@@ -63,21 +70,39 @@ export function LoginForm() {
                 <label htmlFor="password" className="block text-sm font-medium text-foreground mb-2">
                   Password
                 </label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="Enter your password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  disabled={isLoading}
-                  className="w-full"
-                />
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="Enter your password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    disabled={isLoading}
+                    className="w-full pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={togglePasswordVisibility}
+                    disabled={isLoading}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
               </div>
 
               {error && (
-                <div className="flex items-center gap-2 bg-destructive/10 text-destructive px-4 py-3 rounded-lg">
-                  <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                  <span className="text-sm">{error}</span>
+                <div
+                  role="alert"
+                  className="flex items-start gap-3 bg-destructive/10 border border-destructive/30 text-destructive px-4 py-3 rounded-lg"
+                >
+                  <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
+                  <span className="text-sm font-medium">{error}</span>
                 </div>
               )}
 
