@@ -3,8 +3,66 @@ import autoTable from 'jspdf-autotable'
 import * as XLSX from 'xlsx'
 import type { InventoryItem, Activity } from './types'
 
+function formatPeso(value: number): string {
+  return `₱${value.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+function formatInventoryStatus(status: InventoryItem['status']): string {
+  return status.charAt(0).toUpperCase() + status.slice(1)
+}
+
+function computeInventoryReportMetrics(items: InventoryItem[]) {
+  const totalValue = items.reduce((sum, item) => sum + item.quantity * item.price, 0)
+  const lowStockValue = items
+    .filter((i) => i.status === 'low-stock')
+    .reduce((sum, item) => sum + item.quantity * item.price, 0)
+  const expiringValue = items
+    .filter((i) => i.status === 'expiring')
+    .reduce((sum, item) => sum + item.quantity * item.price, 0)
+  return { totalValue, lowStockValue, expiringValue }
+}
+
+function getBranchScopeLabel(branch?: string): string {
+  const label = branch || 'All Branches'
+  return label === 'All Branches' ? 'All items combined' : `Items in ${label}`
+}
+
+function setColumnWidths(ws: XLSX.WorkSheet, widths: number[]) {
+  ws['!cols'] = widths.map((wch) => ({ wch }))
+}
+
+function mergeRow(ws: XLSX.WorkSheet, row: number, fromCol: number, toCol: number) {
+  if (!ws['!merges']) ws['!merges'] = []
+  ws['!merges'].push({ s: { r: row, c: fromCol }, e: { r: row, c: toCol } })
+}
+
+type PdfWithAutoTable = jsPDF & { lastAutoTable?: { finalY: number } }
+
+const PDF_MARGIN = 14
+const PDF_HEAD_BLUE: [number, number, number] = [59, 130, 246]
+const PDF_SUMMARY_HEAD: [number, number, number] = [241, 245, 249]
+const PDF_MUTED_TEXT: [number, number, number] = [100, 116, 139]
+
+function statusPdfStyles(status: InventoryItem['status']): {
+  fillColor?: [number, number, number]
+  textColor?: [number, number, number]
+} {
+  switch (status) {
+    case 'low-stock':
+      return { fillColor: [254, 243, 199], textColor: [146, 64, 14] }
+    case 'expiring':
+    case 'expired':
+      return { fillColor: [254, 226, 226], textColor: [185, 28, 28] }
+    case 'out-of-stock':
+      return { fillColor: [243, 244, 246], textColor: [75, 85, 99] }
+    default:
+      return { fillColor: [220, 252, 231], textColor: [22, 101, 52] }
+  }
+}
+
 /**
- * Export inventory report to PDF
+ * Export inventory report to PDF — mirrors the Reports page layout:
+ * filters, summary cards (values), and inventory preview table.
  */
 export function exportInventoryReportPDF(
   items: InventoryItem[],
@@ -15,76 +73,130 @@ export function exportInventoryReportPDF(
     reportType?: string
   }
 ) {
-  const doc = new jsPDF()
-  
-  // Add title
+  const doc = new jsPDF() as PdfWithAutoTable
+  const branchLabel = filters.branch || 'All Branches'
+  const { totalValue, lowStockValue, expiringValue } = computeInventoryReportMetrics(items)
+  const scopeLabel = getBranchScopeLabel(branchLabel)
+
+  let y = 20
+
   doc.setFontSize(18)
   doc.setFont('helvetica', 'bold')
-  doc.text('IntelliShelf - Inventory Report', 14, 20)
-  
-  // Add metadata
+  doc.text('IntelliShelf - Inventory Report', PDF_MARGIN, y)
+  y += 10
+
   doc.setFontSize(10)
   doc.setFont('helvetica', 'normal')
-  doc.text(`Generated: ${new Date().toLocaleString('en-US')}`, 14, 28)
-  
-  if (filters.branch && filters.branch !== 'all') {
-    doc.text(`Branch: ${filters.branch}`, 14, 34)
-  }
-  
+  doc.text(
+    `Generated: ${new Date().toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' })}`,
+    PDF_MARGIN,
+    y,
+  )
+  y += 6
+  doc.text(`Branch: ${branchLabel}`, PDF_MARGIN, y)
+  y += 6
+
   if (filters.dateFrom || filters.dateTo) {
-    const dateRange = `Date Range: ${filters.dateFrom || 'Start'} to ${filters.dateTo || 'End'}`
-    doc.text(dateRange, 14, filters.branch && filters.branch !== 'all' ? 40 : 34)
+    doc.text(
+      `Date Range: ${filters.dateFrom || '—'} to ${filters.dateTo || '—'}`,
+      PDF_MARGIN,
+      y,
+    )
+    y += 6
   }
-  
-  // Calculate summary
-  const totalValue = items.reduce((sum, item) => sum + (item.quantity * item.price), 0)
-  const lowStockCount = items.filter(i => i.status === 'low-stock').length
-  const expiringCount = items.filter(i => i.status === 'expiring').length
-  
-  // Add summary section
-  const summaryY = filters.branch && filters.branch !== 'all' ? 48 : 42
+
+  y += 4
   doc.setFontSize(12)
   doc.setFont('helvetica', 'bold')
-  doc.text('Summary', 14, summaryY)
-  
-  doc.setFontSize(10)
-  doc.setFont('helvetica', 'normal')
-  doc.text(`Total Items: ${items.length}`, 14, summaryY + 6)
-  doc.text(`Total Value: ₱${totalValue.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`, 14, summaryY + 12)
-  doc.text(`Low Stock Items: ${lowStockCount}`, 14, summaryY + 18)
-  doc.text(`Expiring Soon: ${expiringCount}`, 14, summaryY + 24)
-  
-  // Add table
-  const tableData = items.map(item => [
+  doc.text('Report Summary', PDF_MARGIN, y)
+
+  autoTable(doc, {
+    startY: y + 4,
+    head: [['Total Inventory Value', 'Low Stock Value', 'At Risk Value']],
+    body: [
+      [formatPeso(totalValue), formatPeso(lowStockValue), formatPeso(expiringValue)],
+      [scopeLabel, 'Needs reordering', 'Expiring soon'],
+    ],
+    theme: 'grid',
+    headStyles: {
+      fillColor: PDF_SUMMARY_HEAD,
+      textColor: [15, 23, 42],
+      fontStyle: 'bold',
+      fontSize: 9,
+      halign: 'center',
+    },
+    bodyStyles: { fontSize: 9, halign: 'center' },
+    columnStyles: {
+      0: { cellWidth: 60 },
+      1: { cellWidth: 60 },
+      2: { cellWidth: 60 },
+    },
+    margin: { left: PDF_MARGIN, right: PDF_MARGIN },
+    didParseCell: (data) => {
+      if (data.section === 'body' && data.row.index === 0) {
+        data.cell.styles.fontStyle = 'bold'
+        data.cell.styles.fontSize = 11
+        data.cell.styles.textColor = [15, 23, 42]
+      }
+      if (data.section === 'body' && data.row.index === 1) {
+        data.cell.styles.fontSize = 8
+        data.cell.styles.textColor = PDF_MUTED_TEXT
+      }
+    },
+  })
+
+  const afterSummaryY = (doc.lastAutoTable?.finalY ?? y) + 12
+
+  doc.setFontSize(12)
+  doc.setFont('helvetica', 'bold')
+  doc.text('Inventory Report Preview', PDF_MARGIN, afterSummaryY)
+
+  const tableData = items.map((item) => [
     item.name,
     item.sku,
     item.quantity.toString(),
-    `₱${item.price.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`,
-    `₱${(item.quantity * item.price).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`,
-    item.status.charAt(0).toUpperCase() + item.status.slice(1),
+    formatPeso(item.quantity * item.price),
+    formatInventoryStatus(item.status),
   ])
-  
+
   autoTable(doc, {
-    startY: summaryY + 32,
-    head: [['Item', 'SKU', 'Qty', 'Price', 'Total Value', 'Status']],
+    startY: afterSummaryY + 6,
+    head: [['Item', 'SKU', 'Quantity', 'Estimated Value', 'Status']],
     body: tableData,
     theme: 'grid',
-    headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
-    styles: { fontSize: 8, cellPadding: 2 },
+    headStyles: {
+      fillColor: PDF_HEAD_BLUE,
+      textColor: 255,
+      fontStyle: 'bold',
+      fontSize: 9,
+    },
+    styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
     columnStyles: {
-      2: { halign: 'right' },
-      3: { halign: 'right' },
-      4: { halign: 'right' },
+      0: { cellWidth: 55 },
+      1: { cellWidth: 28 },
+      2: { halign: 'right', cellWidth: 22 },
+      3: { halign: 'right', cellWidth: 32 },
+      4: { halign: 'center', cellWidth: 28 },
+    },
+    margin: { left: PDF_MARGIN, right: PDF_MARGIN },
+    didParseCell: (data) => {
+      if (data.section !== 'body' || data.column.index !== 4) return
+      const status = items[data.row.index]?.status
+      if (!status) return
+      const styles = statusPdfStyles(status)
+      if (styles.fillColor) data.cell.styles.fillColor = styles.fillColor
+      if (styles.textColor) data.cell.styles.textColor = styles.textColor
+      data.cell.styles.fontStyle = 'bold'
     },
   })
-  
-  // Save the PDF
+
   const filename = `inventory_report_${new Date().toISOString().split('T')[0]}.pdf`
   doc.save(filename)
 }
 
 /**
- * Export inventory report to Excel
+ * Export inventory report to Excel — mirrors the Reports page layout:
+ * filters, summary cards (values), and inventory preview table.
  */
 export function exportInventoryReportExcel(
   items: InventoryItem[],
@@ -95,45 +207,70 @@ export function exportInventoryReportExcel(
     reportType?: string
   }
 ) {
-  // Prepare data
-  const data = items.map(item => ({
-    'Item Name': item.name,
-    'SKU': item.sku,
-    'Quantity': item.quantity,
-    'Price': item.price,
-    'Total Value': item.quantity * item.price,
-    'Reorder Level': item.reorderLevel,
-    'Expiry Date': new Date(item.expiryDate).toLocaleDateString('en-US'),
-    'Supplier': item.supplier,
-    'Branch': item.branch,
-    'Status': item.status.charAt(0).toUpperCase() + item.status.slice(1),
-    'Last Restocked': new Date(item.lastRestocked).toLocaleDateString('en-US'),
-  }))
-  
-  // Create workbook
-  const wb = XLSX.utils.book_new()
-  
-  // Add summary sheet
-  const summaryData = [
+  const branchLabel = filters.branch || 'All Branches'
+  const { totalValue, lowStockValue, expiringValue } = computeInventoryReportMetrics(items)
+  const scopeLabel = getBranchScopeLabel(branchLabel)
+
+  const rows: (string | number)[][] = [
     ['IntelliShelf - Inventory Report'],
-    ['Generated:', new Date().toLocaleString('en-US')],
-    ['Branch:', filters.branch || 'All Branches'],
-    [''],
-    ['Summary'],
-    ['Total Items:', items.length],
-    ['Total Value:', `₱${items.reduce((sum, item) => sum + (item.quantity * item.price), 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`],
-    ['Low Stock Items:', items.filter(i => i.status === 'low-stock').length],
-    ['Expiring Soon:', items.filter(i => i.status === 'expiring').length],
+    ['Generated:', new Date().toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' })],
+    ['Branch:', branchLabel],
   ]
-  
-  const summaryWs = XLSX.utils.aoa_to_sheet(summaryData)
-  XLSX.utils.book_append_sheet(wb, summaryWs, 'Summary')
-  
-  // Add data sheet
-  const dataWs = XLSX.utils.json_to_sheet(data)
-  XLSX.utils.book_append_sheet(wb, dataWs, 'Inventory Data')
-  
-  // Save file
+
+  if (filters.dateFrom || filters.dateTo) {
+    rows.push([
+      'Date Range:',
+      `${filters.dateFrom || '—'} to ${filters.dateTo || '—'}`,
+    ])
+  }
+
+  rows.push(
+    [],
+    ['Report Summary'],
+    ['', 'Total Inventory Value', 'Low Stock Value', 'At Risk Value'],
+    ['', formatPeso(totalValue), formatPeso(lowStockValue), formatPeso(expiringValue)],
+    ['', scopeLabel, 'Needs reordering', 'Expiring soon'],
+    [],
+    ['Inventory Report Preview'],
+    ['Item', 'SKU', 'Quantity', 'Estimated Value', 'Status'],
+  )
+
+  for (const item of items) {
+    rows.push([
+      item.name,
+      item.sku,
+      item.quantity,
+      formatPeso(item.quantity * item.price),
+      formatInventoryStatus(item.status),
+    ])
+  }
+
+  const ws = XLSX.utils.aoa_to_sheet(rows)
+  const lastCol = 4
+
+  mergeRow(ws, 0, 0, lastCol)
+
+  const summaryTitleRow = rows.findIndex((r) => r[0] === 'Report Summary')
+  if (summaryTitleRow >= 0) mergeRow(ws, summaryTitleRow, 0, lastCol)
+
+  const previewTitleRow = rows.findIndex((r) => r[0] === 'Inventory Report Preview')
+  if (previewTitleRow >= 0) mergeRow(ws, previewTitleRow, 0, lastCol)
+
+  const tableHeaderRow = rows.findIndex((r) => r[0] === 'Item' && r[1] === 'SKU')
+  if (tableHeaderRow >= 0 && items.length > 0) {
+    ws['!autofilter'] = {
+      ref: XLSX.utils.encode_range({
+        s: { r: tableHeaderRow, c: 0 },
+        e: { r: rows.length - 1, c: lastCol },
+      }),
+    }
+  }
+
+  setColumnWidths(ws, [36, 18, 12, 20, 16])
+
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'Inventory Report')
+
   const filename = `inventory_report_${new Date().toISOString().split('T')[0]}.xlsx`
   XLSX.writeFile(wb, filename)
 }
