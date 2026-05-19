@@ -29,6 +29,7 @@ import { Label } from '@/components/ui/label'
 import { useAuth } from '@/lib/auth-context'
 import { fetchUsers, createUserApi, updateUserApi, deleteUserApi } from '@/lib/api/users'
 import { fetchBranches } from '@/lib/api/branches'
+import { isStrongPassword, PASSWORD_REQUIREMENTS_MESSAGE } from '@/lib/password'
 import type { User, Branch, UserRole } from '@/lib/types'
 
 const roleConfig: Record<string, { label: string; color: string }> = {
@@ -187,8 +188,8 @@ export default function UserManagementPage() {
       setFormError('Password is required for new users')
       return
     }
-    if (form.password && form.password.length < 6) {
-      setFormError('Password must be at least 6 characters')
+    if (form.password && !isStrongPassword(form.password)) {
+      setFormError(PASSWORD_REQUIREMENTS_MESSAGE)
       return
     }
     if (!form.assignedBranch) {
@@ -478,7 +479,11 @@ export default function UserManagementPage() {
                   type={showPassword ? 'text' : 'password'}
                   value={form.password}
                   onChange={(e) => updateField('password', e.target.value)}
-                  placeholder={editingUser ? 'Leave blank to keep current' : 'Min. 6 characters'}
+                  placeholder={
+                    editingUser
+                      ? 'Leave blank to keep current'
+                      : '8+ chars with upper, lower, number, special'
+                  }
                 />
                 <button
                   type="button"
