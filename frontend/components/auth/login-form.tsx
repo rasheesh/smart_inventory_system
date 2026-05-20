@@ -1,12 +1,13 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
-import { AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { AlertCircle, Eye, EyeOff, CheckCircle2 } from 'lucide-react';
 
 export function LoginForm() {
   const [username, setUsername] = useState('');
@@ -14,6 +15,7 @@ export function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [loginSuccess, setLoginSuccess] = useState(false);
 
   const { login } = useAuth();
   const router = useRouter();
@@ -26,7 +28,8 @@ export function LoginForm() {
     const result = await login(username, password);
 
     if (result.success) {
-      router.push('/');
+      setLoginSuccess(true);
+      setTimeout(() => router.push('/'), 800);
     } else {
       setError(result.error ?? 'Invalid username or password');
       // Clear password and ensure it stays masked on failure
@@ -96,6 +99,16 @@ export function LoginForm() {
                 </div>
               </div>
 
+              {loginSuccess && (
+                <div
+                  role="status"
+                  className="flex items-center gap-3 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg"
+                >
+                  <CheckCircle2 className="h-5 w-5 flex-shrink-0" />
+                  <span className="text-sm font-medium">Login successful! Redirecting...</span>
+                </div>
+              )}
+
               {error && (
                 <div
                   role="alert"
@@ -108,11 +121,20 @@ export function LoginForm() {
 
               <Button
                 type="submit"
-                disabled={isLoading || !username || !password}
+                disabled={isLoading || loginSuccess || !username || !password}
                 className="w-full"
               >
                 {isLoading ? 'Signing in...' : 'Sign In'}
               </Button>
+
+              <div className="text-center">
+                <Link
+                  href="/forgot-password"
+                  className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Forgot your password?
+                </Link>
+              </div>
             </form>
           </div>
         </Card>

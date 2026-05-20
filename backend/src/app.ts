@@ -10,6 +10,7 @@ import usersRouter from './routes/users'
 import stockAdjustmentsRouter from './routes/stock-adjustments'
 import activitiesRouter from './routes/activities'
 import alertsRouter from './routes/alerts'
+import passwordResetRouter from './routes/password-reset'
 
 const app = express()
 
@@ -29,6 +30,7 @@ app.get('/api/health', (_req, res) => {
 
 // Routes
 app.use('/api/auth', authRouter)
+app.use('/api/auth', passwordResetRouter)
 app.use('/api/inventory', inventoryRouter)
 app.use('/api/branches', branchesRouter)
 app.use('/api/users', usersRouter)
