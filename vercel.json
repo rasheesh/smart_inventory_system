@@ -4,6 +4,8 @@
     { "src": "frontend/package.json", "use": "@vercel/next" },
     { "src": "api/[...path].ts", "use": "@vercel/node" }
   ],
-  "rewrites": [{ "source": "/api/(.*)", "destination": "/api/$1" }]
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "/api/:path*" }
+  ]
 }
 

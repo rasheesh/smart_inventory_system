@@ -14,6 +14,9 @@
     "seed": "npm run seed --prefix backend",
     "lint": "npm run lint --prefix frontend && npm run lint --prefix backend"
   },
+  "dependencies": {
+    "@vercel/node": "^3.0.0"
+  },
   "devDependencies": {
     "concurrently": "^9.0.0"
   }
