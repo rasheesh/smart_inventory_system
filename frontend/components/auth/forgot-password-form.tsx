@@ -35,7 +35,7 @@ export function ForgotPasswordForm() {
         <Card className="border border-border shadow-lg">
           <div className="p-8">
             <div className="mb-8">
-              <p className="text-muted-foreground">IntelliShelf - Smart Inventory System</p>
+              <p className="text-muted-foreground">InvSys PH - Smart Inventory System</p>
               <h1 className="text-xl font-semibold text-foreground mt-2">Forgot password</h1>
               <p className="text-sm text-muted-foreground mt-1">
                 Enter your account email and we&apos;ll send reset instructions.
