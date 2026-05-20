@@ -92,6 +92,16 @@ export async function createStockAdjustment(input: StockAdjustmentInput, actingU
     }
   }
 
+  // For transfers, validate toBranch is provided and different from source
+  if (input.adjustmentType === 'transfer') {
+    if (!input.toBranch) {
+      throw { status: 400, message: 'toBranch is required for transfer adjustments' }
+    }
+    if (input.toBranch === item.branch) {
+      throw { status: 400, message: 'Source and destination branches must be different' }
+    }
+  }
+
   const quantityDelta = input.adjustmentType === 'add' ? input.quantity : -input.quantity
 
   const actionLabel =
@@ -108,20 +118,55 @@ export async function createStockAdjustment(input: StockAdjustmentInput, actingU
         itemName: item.name,
         type: input.adjustmentType,
         quantity: input.quantity,
-        fromBranch: input.fromBranch ?? null,
+        fromBranch: input.fromBranch ?? item.branch,
         toBranch: input.toBranch ?? null,
         reason: input.reason,
         user: user.name,
       },
     })
 
-    const newQuantity = item.quantity + quantityDelta
-    const newStatus = computeItemStatus(newQuantity, item.reorderLevel, item.expiryDate)
+    // Deduct from source item
+    const newSourceQuantity = item.quantity + quantityDelta
+    const newSourceStatus = computeItemStatus(newSourceQuantity, item.reorderLevel, item.expiryDate)
 
     await tx.inventoryItem.update({
       where: { id: input.itemId },
-      data: { quantity: newQuantity, status: newStatus },
+      data: { quantity: newSourceQuantity, status: newSourceStatus },
     })
+
+    // For transfers: add stock to destination branch
+    // Find existing item with same SKU at destination, or create a new one
+    if (input.adjustmentType === 'transfer' && input.toBranch) {
+      const destItem = await tx.inventoryItem.findFirst({
+        where: { sku: item.sku, branch: input.toBranch },
+      })
+
+      if (destItem) {
+        // Item already exists at destination — just increment quantity
+        const newDestQuantity = destItem.quantity + input.quantity
+        const newDestStatus = computeItemStatus(newDestQuantity, destItem.reorderLevel, destItem.expiryDate)
+        await tx.inventoryItem.update({
+          where: { id: destItem.id },
+          data: { quantity: newDestQuantity, status: newDestStatus, lastRestocked: new Date() },
+        })
+      } else {
+        // Item doesn't exist at destination — create it as a copy with transferred quantity
+        await tx.inventoryItem.create({
+          data: {
+            name: item.name,
+            sku: `${item.sku}-${input.toBranch.replace(/\s+/g, '').toUpperCase().slice(0, 3)}`,
+            quantity: input.quantity,
+            price: item.price,
+            reorderLevel: item.reorderLevel,
+            expiryDate: item.expiryDate,
+            supplier: item.supplier,
+            branch: input.toBranch,
+            status: computeItemStatus(input.quantity, item.reorderLevel, item.expiryDate),
+            lastRestocked: new Date(),
+          },
+        })
+      }
+    }
 
     await logActivity(
       {
@@ -129,7 +174,9 @@ export async function createStockAdjustment(input: StockAdjustmentInput, actingU
         action: actionLabel,
         item: item.name,
         branch: item.branch,
-        details: `${input.adjustmentType} ${input.quantity} units — ${input.reason}`,
+        details: input.adjustmentType === 'transfer'
+          ? `Transferred ${input.quantity} units to ${input.toBranch} — ${input.reason}`
+          : `${input.adjustmentType} ${input.quantity} units — ${input.reason}`,
       },
       tx,
     )

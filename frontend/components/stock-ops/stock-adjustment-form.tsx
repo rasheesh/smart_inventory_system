@@ -42,21 +42,34 @@ export function StockAdjustmentForm({ onSubmit }: StockAdjustmentFormProps) {
   const [adjustmentType, setAdjustmentType] = useState<'add' | 'remove' | 'transfer'>('add')
   const [itemId, setItemId] = useState('')
   const [quantity, setQuantity] = useState('')
-  const [fromBranch, setFromBranch] = useState(isAdmin ? '' : (user?.branch || ''))
   const [toBranch, setToBranch] = useState('')
   const [reason, setReason] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
-  // Filter items based on user branch
+  // The selected item object
+  const selectedItem = inventoryItems.find((i) => i.id === itemId)
+
+  // The source branch is always the item's own branch — not user-selectable
+  const sourceBranch = selectedItem?.branch ?? (isAdmin ? '' : (user?.branch ?? ''))
+
+  // Items available to the current user
   const availableItems = isAdmin
     ? inventoryItems
     : inventoryItems.filter((item) => item.branch === user?.branch)
 
+  // Destination branches: all branches except the item's own branch
+  const destinationBranches = branches.filter((b) => b.name !== sourceBranch)
+
   const adjustmentTypes = userCanTransfer
     ? (['add', 'remove', 'transfer'] as const)
     : (['add', 'remove'] as const)
+
+  // Reset toBranch when item changes (source branch may change)
+  useEffect(() => {
+    setToBranch('')
+  }, [itemId])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -68,13 +81,13 @@ export function StockAdjustmentForm({ onSubmit }: StockAdjustmentFormProps) {
       return
     }
 
-    if (adjustmentType === 'transfer' && (!fromBranch || !toBranch)) {
-      setFormError('Please select both source and destination branches')
+    if (adjustmentType === 'transfer' && !toBranch) {
+      setFormError('Please select a destination branch')
       return
     }
 
-    if (adjustmentType !== 'transfer' && !fromBranch) {
-      setFormError('Please select a branch')
+    if (!selectedItem) {
+      setFormError('Selected item not found')
       return
     }
 
@@ -82,7 +95,7 @@ export function StockAdjustmentForm({ onSubmit }: StockAdjustmentFormProps) {
       adjustmentType,
       itemId,
       quantity: parseInt(quantity),
-      fromBranch: fromBranch || undefined,
+      fromBranch: sourceBranch || undefined,
       toBranch: adjustmentType === 'transfer' ? toBranch : undefined,
       reason,
     }
@@ -104,7 +117,6 @@ export function StockAdjustmentForm({ onSubmit }: StockAdjustmentFormProps) {
     setAdjustmentType('add')
     setItemId('')
     setQuantity('')
-    setFromBranch(isAdmin ? '' : (user?.branch || ''))
     setToBranch('')
     setReason('')
     setFormError(null)
@@ -146,6 +158,7 @@ export function StockAdjustmentForm({ onSubmit }: StockAdjustmentFormProps) {
                     setAdjustmentType(type)
                     setSuccessMessage(null)
                     setFormError(null)
+                    setToBranch('')
                   }}
                   className={`p-3 rounded-lg border-2 transition-colors capitalize ${adjustmentType === type
                       ? 'border-primary bg-primary/5'
@@ -187,26 +200,15 @@ export function StockAdjustmentForm({ onSubmit }: StockAdjustmentFormProps) {
             />
           </div>
 
-          {/* Branch Selection - Only for admin (non-transfer) */}
+          {/* Branch — always derived from the selected item, read-only */}
           {adjustmentType !== 'transfer' && (
             <div>
-              <label className="text-sm font-medium block mb-2">Branch *</label>
-              {isAdmin ? (
-                <Select value={fromBranch} onValueChange={setFromBranch}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select branch..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {branches.map((branch) => (
-                      <SelectItem key={branch.id} value={branch.name}>
-                        {branch.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <Input value={user?.branch || ''} disabled className="bg-muted" />
-              )}
+              <label className="text-sm font-medium block mb-2">Branch</label>
+              <Input
+                value={sourceBranch || 'Select an item first'}
+                disabled
+                className="bg-muted"
+              />
             </div>
           )}
 
@@ -214,38 +216,29 @@ export function StockAdjustmentForm({ onSubmit }: StockAdjustmentFormProps) {
           {adjustmentType === 'transfer' && (
             <>
               <div>
-                <label className="text-sm font-medium block mb-2">From Branch *</label>
-                {isAdmin ? (
-                  <Select value={fromBranch} onValueChange={setFromBranch}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select source branch..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {branches.map((branch) => (
-                        <SelectItem key={branch.id} value={branch.name}>
-                          {branch.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <Input value={user?.branch || ''} disabled className="bg-muted" />
-                )}
+                <label className="text-sm font-medium block mb-2">From Branch</label>
+                <Input
+                  value={sourceBranch || 'Select an item first'}
+                  disabled
+                  className="bg-muted"
+                />
               </div>
               <div>
                 <label className="text-sm font-medium block mb-2">To Branch *</label>
-                <Select value={toBranch} onValueChange={setToBranch}>
+                <Select
+                  value={toBranch}
+                  onValueChange={setToBranch}
+                  disabled={!selectedItem}
+                >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select destination branch..." />
+                    <SelectValue placeholder={selectedItem ? 'Select destination branch...' : 'Select an item first'} />
                   </SelectTrigger>
                   <SelectContent>
-                    {branches
-                      .filter((branch) => branch.name !== (isAdmin ? fromBranch : user?.branch))
-                      .map((branch) => (
-                        <SelectItem key={branch.id} value={branch.name}>
-                          {branch.name}
-                        </SelectItem>
-                      ))}
+                    {destinationBranches.map((branch) => (
+                      <SelectItem key={branch.id} value={branch.name}>
+                        {branch.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

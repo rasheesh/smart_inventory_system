@@ -1,20 +1,12 @@
 import { Router } from 'express'
+import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { z } from 'zod'
+import { prisma } from '../lib/prisma'
 import { JWT_SECRET, JWT_EXPIRES_IN } from '../lib/env'
+import { authenticate } from '../middleware/auth'
 
 const router = Router()
-
-// Mock demo credentials (development only)
-const DEMO_CREDENTIALS: Record<string, { password: string; fullName: string; role: string; branch: string }> = {
-  admin: { password: 'password123', fullName: 'Administrator', role: 'admin', branch: 'all' },
-  manila_manager: { password: 'manila2024', fullName: 'Maria Santos', role: 'branch-manager', branch: 'Manila Branch' },
-  cebu_manager: { password: 'cebu2024', fullName: 'Juan Dela Cruz', role: 'branch-manager', branch: 'Cebu Branch' },
-  davao_manager: { password: 'davao2024', fullName: 'Rosa Garcia', role: 'branch-manager', branch: 'Davao Branch' },
-  manila_staff: { password: 'staff123', fullName: 'Anna Lopez', role: 'staff', branch: 'Manila Branch' },
-  cebu_staff: { password: 'staff123', fullName: 'Miguel Rodriguez', role: 'staff', branch: 'Cebu Branch' },
-  davao_staff: { password: 'staff123', fullName: 'Christine Reyes', role: 'staff', branch: 'Davao Branch' },
-}
 
 const loginSchema = z.object({
   username: z.string().min(1, 'Username is required'),
@@ -32,30 +24,45 @@ router.post('/login', async (req, res) => {
   const { username, password } = parsed.data
 
   try {
-    const cred = DEMO_CREDENTIALS[username]
+    const user = await prisma.user.findUnique({ where: { username } })
 
-    if (!cred || cred.password !== password) {
-      res.status(401).json({ message: 'Invalid username or password' })
+    if (!user) {
+      res.status(401).json({ message: 'Invalid credentials' })
       return
     }
 
+    const passwordMatch = await bcrypt.compare(password, user.passwordHash)
+    if (!passwordMatch) {
+      res.status(401).json({ message: 'Invalid credentials' })
+      return
+    }
+
+    // Normalize role for JWT payload (store as hyphenated for frontend compatibility)
+    const roleForJwt = user.role === 'branch_manager' ? 'branch-manager' : user.role
+
     const token = jwt.sign(
       {
-        sub: username,
-        role: cred.role,
-        branch: cred.branch,
+        sub: user.id,
+        role: roleForJwt,
+        branch: user.assignedBranch,
       },
       JWT_SECRET,
       { expiresIn: JWT_EXPIRES_IN } as jwt.SignOptions,
     )
 
+    // Update lastLogin
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { lastLogin: new Date() },
+    })
+
     res.json({
       token,
       user: {
-        id: username,
-        fullName: cred.fullName,
-        role: cred.role,
-        branch: cred.branch,
+        id: user.id,
+        fullName: user.name,
+        role: roleForJwt,
+        branch: user.assignedBranch,
       },
     })
   } catch (err) {
@@ -65,7 +72,7 @@ router.post('/login', async (req, res) => {
 })
 
 // POST /api/auth/logout
-router.post('/logout', (_req, res) => {
+router.post('/logout', authenticate, (_req, res) => {
   // Stateless JWT — no server-side session to invalidate
   res.json({ message: 'Logged out successfully' })
 })

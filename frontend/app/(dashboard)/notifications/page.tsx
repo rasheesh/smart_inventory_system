@@ -50,7 +50,7 @@ export default function NotificationsPage() {
         const data = await fetchAlerts()
         const scopedAlerts = isAdmin
           ? data
-          : data.filter((alert) => alert.branch === user.branch)
+          : data.filter((alert) => alert.branch === user?.branch)
         setAlerts(scopedAlerts)
       } catch {
         setError(true)
