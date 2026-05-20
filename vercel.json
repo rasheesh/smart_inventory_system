@@ -1,0 +1,9 @@
+{
+  "version": 2,
+  "builds": [
+    { "src": "frontend/package.json", "use": "@vercel/next" },
+    { "src": "api/[...path].ts", "use": "@vercel/node" }
+  ],
+  "rewrites": [{ "source": "/api/(.*)", "destination": "/api/$1" }]
+}
+

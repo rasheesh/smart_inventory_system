@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "description": "Smart Inventory System — monorepo root orchestration",
   "private": true,
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
   "scripts": {
     "dev": "concurrently \"npm run dev --prefix frontend\" \"npm run dev --prefix backend\"",
     "build": "npm run build --prefix frontend && npm run build --prefix backend",
