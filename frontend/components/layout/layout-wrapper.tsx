@@ -15,19 +15,20 @@ export function LayoutWrapper({ children }: LayoutWrapperProps) {
   const pathname = usePathname();
   const router = useRouter();
 
-  // Check if current path is login page
-  const isLoginPage = pathname === '/login';
+  // Public routes that don't require authentication
+  const PUBLIC_ROUTES = ['/login', '/forgot-password', '/reset-password'];
+  const isPublicPage = PUBLIC_ROUTES.some((route) => pathname === route || pathname.startsWith(route + '?'));
 
   useEffect(() => {
-    // If user is on login page and authenticated, redirect to dashboard
-    if (isLoginPage && isAuthenticated && !isLoading) {
+    // If user is on a public page and authenticated, redirect to dashboard
+    if (isPublicPage && isAuthenticated && !isLoading) {
       router.push('/');
     }
-    // If user is not on login page and not authenticated, redirect to login
-    if (!isLoginPage && !isAuthenticated && !isLoading) {
+    // If user is not on a public page and not authenticated, redirect to login
+    if (!isPublicPage && !isAuthenticated && !isLoading) {
       router.push('/login');
     }
-  }, [isAuthenticated, isLoading, isLoginPage, router, pathname]);
+  }, [isAuthenticated, isLoading, isPublicPage, router, pathname]);
 
   // Show loading spinner while checking auth
   if (isLoading) {
@@ -38,8 +39,8 @@ export function LayoutWrapper({ children }: LayoutWrapperProps) {
     );
   }
 
-  // If on login page, render without MainLayout
-  if (isLoginPage) {
+  // If on a public page, render without MainLayout
+  if (isPublicPage) {
     return <>{children}</>;
   }
 
